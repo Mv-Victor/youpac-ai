@@ -1,7 +1,7 @@
 import { v } from "convex/values";
 import { action } from "./_generated/server";
 import { api } from "./_generated/api";
-import { openai } from "@ai-sdk/openai";
+import { anthropic } from "@ai-sdk/anthropic";
 import { generateText } from "ai";
 
 export const refineContent = action({
@@ -104,11 +104,11 @@ export const refineContent = action({
 
       // Generate refined content
       const { text: response } = await generateText({
-        model: openai("gpt-4o-mini"),
+        model: anthropic("claude-sonnet-4-20250514"),
         system: systemPrompt,
         prompt,
         temperature: 0.7,
-        maxTokens: 500,
+        maxTokens: 2048,
       });
 
       // Extract the updated draft from the response

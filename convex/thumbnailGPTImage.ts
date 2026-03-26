@@ -47,11 +47,16 @@ export const generateThumbnailWithGPTImage = action({
     if (!identity) throw new Error("Unauthorized");
 
     const apiKey = process.env.OPENAI_API_KEY;
+    const apiBaseUrl = process.env.OPENAI_BASE_URL || "https://lnapi.com/v1";
+    
     if (!apiKey) {
       throw new Error("OpenAI API key not configured");
     }
 
-    const openai = new OpenAI({ apiKey });
+    const openai = new OpenAI({ 
+      apiKey,
+      baseURL: apiBaseUrl,
+    });
 
     try {
       // Get fresh video data if videoId is provided

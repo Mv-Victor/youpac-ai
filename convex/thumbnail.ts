@@ -67,14 +67,19 @@ export const generateThumbnail = action({
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) throw new Error("Unauthorized");
 
-    // Get OpenAI API key from Convex environment
+    // Get OpenAI API key from Convex environment (using LN-API for DALL-E 3)
     const apiKey = process.env.OPENAI_API_KEY;
+    const apiBaseUrl = process.env.OPENAI_BASE_URL || "https://lnapi.com/v1";
+    
     if (!apiKey) {
       console.error("[Thumbnail] OpenAI API key not configured");
       throw new Error("Thumbnail generation service is not configured. Please contact support.");
     }
 
-    const openai = new OpenAI({ apiKey });
+    const openai = new OpenAI({ 
+      apiKey,
+      baseURL: apiBaseUrl,
+    });
 
     try {
       // If we have a videoId, fetch the latest video data with transcription

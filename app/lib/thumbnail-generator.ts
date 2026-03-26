@@ -4,14 +4,19 @@ interface ThumbnailGeneratorOptions {
   images: File[];
   prompt: string;
   apiKey: string;
+  baseURL?: string;
 }
 
 export async function generateThumbnailWithGPTImage({
   images,
   prompt,
   apiKey,
+  baseURL = "https://lnapi.com/v1",
 }: ThumbnailGeneratorOptions): Promise<{ imageUrl: string; base64?: string }> {
-  const client = new OpenAI({ apiKey });
+  const client = new OpenAI({ 
+    apiKey,
+    baseURL,
+  });
 
   // Convert File objects to OpenAI format
   const imageFiles = await Promise.all(
