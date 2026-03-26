@@ -108,7 +108,7 @@ export const refineContent = action({
         system: systemPrompt,
         prompt,
         temperature: 0.7,
-        maxTokens: 2048,
+        maxOutputTokens: 2048,
       });
 
       // Extract the updated draft from the response

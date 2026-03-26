@@ -18,7 +18,7 @@ export const chat = httpAction(async (ctx, req) => {
   });
 
   // Respond with the stream
-  return result.toDataStreamResponse({
+  return result.toTextStreamResponse({
     headers: {
       "Access-Control-Allow-Origin": process.env.FRONTEND_URL || "http://localhost:5173",
       "Access-Control-Allow-Methods": "POST, OPTIONS",

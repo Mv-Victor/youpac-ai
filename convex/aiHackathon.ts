@@ -115,7 +115,7 @@ export const generateContentSimple = action({
         system: getSystemPrompt(args.agentType),
         prompt,
         temperature: params.temperature,
-        maxTokens: params.maxTokens,
+        maxOutputTokens: params.maxTokens,
       });
 
       return { content: generatedContent, prompt };

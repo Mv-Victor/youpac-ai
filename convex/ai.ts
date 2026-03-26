@@ -60,7 +60,7 @@ export const generateContent = action({
         system: getSystemPrompt(agent.type),
         prompt,
         temperature: 0.7,
-        maxTokens: agent.type === "description" ? 4096 : 2048,
+        maxOutputTokens: agent.type === "description" ? 4096 : 2048,
       });
 
       // Update agent with generated content
@@ -176,7 +176,7 @@ export const refineContent = action({
           },
         ],
         temperature: 0.7,
-        maxTokens: agent.type === "description" ? 4096 : 2048,
+        maxOutputTokens: agent.type === "description" ? 4096 : 2048,
       });
 
       // Update agent with refined content
