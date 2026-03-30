@@ -1,4 +1,4 @@
-import { anthropic } from "@ai-sdk/anthropic";
+import { anthropic } from "./lib/anthropic";
 import { streamText } from "ai";
 import { httpRouter } from "convex/server";
 import { httpAction } from "./_generated/server";
@@ -8,7 +8,7 @@ export const chat = httpAction(async (ctx, req) => {
   const { messages } = await req.json();
 
   const result = streamText({
-    model: anthropic("claude-sonnet-4-20250514"),
+    model: anthropic("claude-opus-4-6"),
     messages,
     async onFinish({ text }) {
       // implement your own logic here, e.g. for storing messages

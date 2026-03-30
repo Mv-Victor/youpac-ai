@@ -1,7 +1,7 @@
 import { v } from "convex/values";
 import { action } from "./_generated/server";
 import { api } from "./_generated/api";
-import { anthropic } from "@ai-sdk/anthropic";
+import { anthropic } from "./lib/anthropic";
 import { generateText } from "ai";
 
 // Simplified AI generation for hackathon - no database dependencies
@@ -111,11 +111,11 @@ export const generateContentSimple = action({
         || { temperature: 0.7, maxTokens: 300 };
 
       const { text: generatedContent } = await generateText({
-        model: anthropic("claude-sonnet-4-20250514"),
+        model: anthropic("claude-opus-4-6"),
         system: getSystemPrompt(args.agentType),
         prompt,
         temperature: params.temperature,
-        maxOutputTokens: params.maxTokens,
+        maxTokens: params.maxTokens,
       });
 
       return { content: generatedContent, prompt };

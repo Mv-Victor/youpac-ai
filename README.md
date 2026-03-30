@@ -103,6 +103,10 @@ npx convex dev
 5. Set up environment variables in Convex dashboard:
    - `OPENAI_API_KEY`
    - `ELEVENLABS_API_KEY`
+or run the command below
+```bash
+npx convex env set ELEVENLABS_API_KEY ... && npx convex env set OPENAI_API_KEY ... && npx convex env set OPENAI_BASE_URL ... && npx convex env set ANTHROPIC_API_KEY ... && npx convex env set ANTHROPIC_URL ...
+```
 
 ### Development
 

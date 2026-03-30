@@ -15,5 +15,8 @@ export default [
     route("dashboard/project/:projectId", "routes/dashboard/project.$projectId.tsx"),
     route("dashboard/chat", "routes/dashboard/chat.tsx"),
     route("dashboard/settings", "routes/dashboard/settings.tsx"),
+    // Story Canvas (Drama.Land-style pipeline) — NEW
+    route("dashboard/story/:projectId", "routes/dashboard/story.$projectId.tsx"),
   ]),
+  route("*", "routes/$.tsx"),
 ] satisfies RouteConfig;

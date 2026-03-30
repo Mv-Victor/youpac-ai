@@ -1,7 +1,7 @@
 import { v } from "convex/values";
 import { action } from "./_generated/server";
 import { api } from "./_generated/api";
-import { anthropic } from "@ai-sdk/anthropic";
+import { anthropic } from "./lib/anthropic";
 import { generateText } from "ai";
 
 export const generateContent = action({
@@ -56,11 +56,11 @@ export const generateContent = action({
       );
 
       const { text: generatedContent } = await generateText({
-        model: anthropic("claude-sonnet-4-20250514"),
+        model: anthropic("claude-opus-4-6"),
         system: getSystemPrompt(agent.type),
         prompt,
         temperature: 0.7,
-        maxOutputTokens: agent.type === "description" ? 4096 : 2048,
+        maxTokens: agent.type === "description" ? 4096 : 2048,
       });
 
       // Update agent with generated content
@@ -163,7 +163,7 @@ export const refineContent = action({
       }
 
       const { text: refinedContent } = await generateText({
-        model: anthropic("claude-sonnet-4-20250514"),
+        model: anthropic("claude-opus-4-6"),
         system: getSystemPrompt(agent.type),
         messages: [
           {
@@ -176,7 +176,7 @@ export const refineContent = action({
           },
         ],
         temperature: 0.7,
-        maxOutputTokens: agent.type === "description" ? 4096 : 2048,
+        maxTokens: agent.type === "description" ? 4096 : 2048,
       });
 
       // Update agent with refined content
