@@ -2,8 +2,8 @@ import { Link } from "react-router";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "convex/_generated/api";
 import type { Id } from "convex/_generated/dataModel";
-import { useState, useEffect } from "react";
-import { Plus, Video, Calendar, Archive, MoreVertical, Settings, User, ArrowRight, Sparkles } from "lucide-react";
+import { useState } from "react";
+import { Plus, Calendar, MoreVertical, Clapperboard as DreamXIcon } from "lucide-react";
 import { Button } from "~/components/ui/button";
 import {
   Card,
@@ -35,295 +35,263 @@ import { toast } from "sonner";
 import { formatDistanceToNow } from "date-fns";
 
 export default function Page() {
-  const projects = useQuery(api.projects.list, { includeArchived: false });
-  const profile = useQuery(api.profiles.get);
-  const createProject = useMutation(api.projects.create);
-  const archiveProject = useMutation(api.projects.update);
-  const deleteProject = useMutation(api.projects.remove);
-  
-  const [isCreateOpen, setIsCreateOpen] = useState(false);
-  const [showProfileDialog, setShowProfileDialog] = useState(false);
-  const [newProject, setNewProject] = useState({
-    title: "",
-    description: "",
-  });
+  // ── DreamX AI 营销视频工作流 ────────────────────────────────────────────────
+  const dxApi = api as any;
+  const dreamXProjects = useQuery(dxApi.dreamXCanvas.listProjects, { includeArchived: false });
+  const createDreamXProject = useMutation(dxApi.dreamXCanvas.createProject);
+  const deleteDreamXProject = useMutation(dxApi.dreamXCanvas.deleteProject);
+  const [isCreateDreamXOpen, setIsCreateDreamXOpen] = useState(false);
+  const [newDreamXProject, setNewDreamXProject] = useState({ title: "", description: "" });
 
-  // Check if profile is incomplete on first visit
-  useEffect(() => {
-    if (profile !== undefined) {
-      const isIncomplete = !profile || !profile.channelName || !profile.contentType || !profile.niche;
-      if (isIncomplete && !localStorage.getItem('profileDialogDismissed')) {
-        setShowProfileDialog(true);
-      }
-    }
-  }, [profile]);
-
-  const handleDismissProfileDialog = () => {
-    setShowProfileDialog(false);
-    localStorage.setItem('profileDialogDismissed', 'true');
-  };
-
-  const handleCreateProject = async () => {
-    if (!newProject.title.trim()) {
-      toast.error("Project title is required");
+  const handleCreateDreamXProject = async () => {
+    if (!newDreamXProject.title.trim()) {
+      toast.error("DreamX 项目标题不能为空");
       return;
     }
-
     try {
-      const projectId = await createProject({
-        title: newProject.title,
-        description: newProject.description || undefined,
+      const id = await createDreamXProject({
+        title: newDreamXProject.title,
+        description: newDreamXProject.description || undefined,
       });
-      
-      toast.success("Project created successfully!");
-      setIsCreateOpen(false);
-      setNewProject({ title: "", description: "" });
-      
-      // Navigate to the new project canvas
-      window.location.href = `/dashboard/project/${projectId}`;
-    } catch (error) {
-      toast.error("Failed to create project");
+      toast.success("DreamX 项目创建成功！");
+      setIsCreateDreamXOpen(false);
+      setNewDreamXProject({ title: "", description: "" });
+      window.location.href = `/dashboard/dreamx/${id}`;
+    } catch {
+      toast.error("创建失败，请重试");
     }
   };
 
-  const handleArchive = async (projectId: string) => {
+  const handleDeleteDreamXProject = async (id: string) => {
+    if (!confirm("确定要删除这个 DreamX 项目吗？此操作不可撤销。")) return;
     try {
-      await archiveProject({
-        id: projectId as Id<"projects">,
-        isArchived: true,
-      });
-      toast.success("Project archived");
-    } catch (error) {
-      toast.error("Failed to archive project");
-    }
-  };
-
-  const handleDelete = async (projectId: string) => {
-    if (!confirm("Are you sure you want to delete this project? This action cannot be undone.")) {
-      return;
-    }
-
-    try {
-      await deleteProject({ id: projectId as Id<"projects"> });
-      toast.success("Project deleted");
-    } catch (error) {
-      toast.error("Failed to delete project");
+      await deleteDreamXProject({ id: id as Id<"dreamXProjects"> });
+      toast.success("项目已删除");
+    } catch {
+      toast.error("删除失败");
     }
   };
 
   return (
     <div className="space-y-6 p-6">
-      {/* Profile Completion Dialog */}
-      <Dialog open={showProfileDialog} onOpenChange={setShowProfileDialog}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <div className="flex items-center gap-3 mb-2">
-              <div className="p-2.5 rounded-xl bg-gradient-to-br from-primary/20 to-primary/10">
-                <User className="h-5 w-5 text-primary" />
-              </div>
-              <DialogTitle className="text-xl">Complete Your Profile</DialogTitle>
-            </div>
-            <DialogDescription className="text-base">
-              Set up your YouTube channel profile to get personalized AI-generated content that matches your style and audience.
-            </DialogDescription>
-          </DialogHeader>
-          
-          <div className="space-y-4 py-4">
-            <div className="rounded-lg border bg-muted/50 p-4">
-              <h4 className="font-medium mb-2 flex items-center gap-2">
-                <Sparkles className="h-4 w-4 text-primary" />
-                Why complete your profile?
-              </h4>
-              <ul className="space-y-2 text-sm text-muted-foreground">
-                <li className="flex items-start gap-2">
-                  <span className="text-primary mt-0.5">•</span>
-                  <span>AI generates content tailored to your channel's niche</span>
-                </li>
-                <li className="flex items-start gap-2">
-                  <span className="text-primary mt-0.5">•</span>
-                  <span>Matches your unique tone and communication style</span>
-                </li>
-                <li className="flex items-start gap-2">
-                  <span className="text-primary mt-0.5">•</span>
-                  <span>Targets your specific audience demographics</span>
-                </li>
-              </ul>
-            </div>
-          </div>
-          
-          <DialogFooter className="flex-col sm:flex-row gap-2">
-            <Button
-              variant="outline"
-              onClick={handleDismissProfileDialog}
-              className="sm:flex-1"
-            >
-              Skip for now
-            </Button>
-            <Button asChild className="sm:flex-1 gap-2">
-              <Link to="/dashboard/settings">
-                <Settings className="h-4 w-4" />
-                Go to Settings
-                <ArrowRight className="h-4 w-4" />
-              </Link>
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
+      {/* ── DreamX AI 营销视频工作流 ────────────────────────────────────────── */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold">Projects</h1>
-          <p className="text-muted-foreground">
-            Create and manage your YouTube video projects
+          <div className="flex items-center gap-2 mb-1">
+            <div className="p-1.5 rounded-lg bg-gradient-to-br from-rose-500/20 to-red-500/20">
+              <DreamXIcon className="h-4 w-4 text-rose-500" />
+            </div>
+            <h2 className="text-2xl font-bold">DreamX AI</h2>
+            <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-rose-500/15 text-rose-600 border border-rose-500/20">
+              营销视频
+            </span>
+          </div>
+          <p className="text-sm text-muted-foreground">
+            AI 驱动的营销视频流水线：素材上传 → 表情包召回 → BGM召回 → 分镜脚本 → TTS配音 → CapCut 成片
           </p>
         </div>
-        
-        <div className="flex items-center gap-3">
-          {profile && (!profile.channelName || !profile.contentType || !profile.niche) && (
-            <Button variant="outline" size="sm" asChild className="gap-2">
-              <Link to="/dashboard/settings">
-                <User className="h-4 w-4" />
-                Complete Profile
-              </Link>
+
+        <Dialog open={isCreateDreamXOpen} onOpenChange={setIsCreateDreamXOpen}>
+          <DialogTrigger asChild>
+            <Button
+              variant="outline"
+              className="gap-2 border-rose-500/30 hover:border-rose-500/60 hover:bg-rose-500/5"
+            >
+              <Plus className="h-4 w-4 text-rose-500" />
+              新建 DreamX 项目
             </Button>
-          )}
-          
-          <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
-            <DialogTrigger asChild>
-              <Button>
-                <Plus className="mr-2 h-4 w-4" />
-                New Project
-              </Button>
-            </DialogTrigger>
+          </DialogTrigger>
           <DialogContent>
             <DialogHeader>
-              <DialogTitle>Create New Project</DialogTitle>
+              <div className="flex items-center gap-3 mb-1">
+                <div className="p-2 rounded-lg bg-gradient-to-br from-rose-500/20 to-red-500/20">
+                  <DreamXIcon className="h-5 w-5 text-rose-500" />
+                </div>
+                <DialogTitle>新建 DreamX 项目</DialogTitle>
+              </div>
               <DialogDescription>
-                Each project is a canvas for creating content for one video
+                创建一个新的 AI 营销视频项目，使用7步流水线自动生产 CapCut 工程
               </DialogDescription>
             </DialogHeader>
             <div className="grid gap-4 py-4">
               <div className="grid gap-2">
-                <Label htmlFor="title">Project Title</Label>
+                <Label htmlFor="dx-title">项目标题 *</Label>
                 <Input
-                  id="title"
-                  placeholder="My Awesome Video"
-                  value={newProject.title}
+                  id="dx-title"
+                  placeholder="我的营销视频项目"
+                  value={newDreamXProject.title}
                   onChange={(e) =>
-                    setNewProject({ ...newProject, title: e.target.value })
+                    setNewDreamXProject({ ...newDreamXProject, title: e.target.value })
                   }
                 />
               </div>
               <div className="grid gap-2">
-                <Label htmlFor="description">Description (optional)</Label>
+                <Label htmlFor="dx-description">项目描述（可选）</Label>
                 <Textarea
-                  id="description"
-                  placeholder="Brief description of your video project..."
-                  value={newProject.description}
+                  id="dx-description"
+                  placeholder="简单描述这个视频要做什么..."
+                  value={newDreamXProject.description}
                   onChange={(e) =>
-                    setNewProject({ ...newProject, description: e.target.value })
+                    setNewDreamXProject({ ...newDreamXProject, description: e.target.value })
                   }
+                  className="resize-none h-20"
                 />
+              </div>
+              <div className="rounded-lg bg-rose-500/10 border border-rose-500/20 p-3">
+                <p className="text-xs font-medium text-rose-600 mb-1">7步 AI 流水线</p>
+                <div className="flex items-center gap-1 flex-wrap">
+                  {["素材上传", "文案", "表情包", "分镜", "BGM", "TTS", "CapCut"].map(
+                    (step, i) => (
+                      <div key={step} className="flex items-center gap-1">
+                        <span className="text-[11px] text-muted-foreground">{step}</span>
+                        {i < 6 && <span className="text-[11px] text-muted-foreground/50">→</span>}
+                      </div>
+                    )
+                  )}
+                </div>
               </div>
             </div>
             <DialogFooter>
-              <Button variant="outline" onClick={() => setIsCreateOpen(false)}>
-                Cancel
+              <Button variant="outline" onClick={() => setIsCreateDreamXOpen(false)}>
+                取消
               </Button>
-              <Button onClick={handleCreateProject}>Create Project</Button>
+              <Button
+                onClick={handleCreateDreamXProject}
+                className="bg-gradient-to-r from-rose-500 to-red-600 hover:opacity-90"
+              >
+                <DreamXIcon className="h-4 w-4 mr-2" />
+                创建并进入画布
+              </Button>
             </DialogFooter>
           </DialogContent>
-          </Dialog>
-        </div>
+        </Dialog>
       </div>
 
-      {projects === undefined ? (
+      {/* DreamX projects grid */}
+      {dreamXProjects === undefined ? (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {[1, 2, 3].map((i) => (
+          {[1, 2].map((i) => (
             <Card key={i} className="animate-pulse">
               <CardHeader className="space-y-2">
                 <div className="h-4 w-3/4 bg-muted rounded" />
                 <div className="h-3 w-1/2 bg-muted rounded" />
               </CardHeader>
               <CardContent>
-                <div className="h-32 bg-muted rounded" />
+                <div className="h-20 bg-muted rounded" />
               </CardContent>
             </Card>
           ))}
         </div>
-      ) : projects.length === 0 ? (
-        <Card className="border-dashed">
-          <CardContent className="flex flex-col items-center justify-center py-12">
-            <Video className="h-12 w-12 text-muted-foreground mb-4" />
-            <h3 className="text-lg font-semibold mb-2">No projects yet</h3>
-            <p className="text-muted-foreground text-center mb-4">
-              Create your first project to start generating YouTube content
+      ) : dreamXProjects.length === 0 ? (
+        <Card className="border-dashed border-rose-500/20 bg-rose-500/5">
+          <CardContent className="flex flex-col items-center justify-center py-10">
+            <div className="p-3 rounded-xl bg-gradient-to-br from-rose-500/20 to-red-500/20 mb-3">
+              <DreamXIcon className="h-8 w-8 text-rose-500" />
+            </div>
+            <h3 className="text-base font-semibold mb-1">还没有 DreamX 项目</h3>
+            <p className="text-sm text-muted-foreground text-center mb-4 max-w-xs">
+              创建第一个项目，让 AI 帮你自动化生产营销短视频
             </p>
-            <Button onClick={() => setIsCreateOpen(true)}>
-              <Plus className="mr-2 h-4 w-4" />
-              Create First Project
+            <Button
+              onClick={() => setIsCreateDreamXOpen(true)}
+              variant="outline"
+              className="gap-2 border-rose-500/30 hover:border-rose-500/60"
+            >
+              <Plus className="h-4 w-4 text-rose-500" />
+              新建 DreamX 项目
             </Button>
           </CardContent>
         </Card>
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {projects.map((project) => (
-            <Card key={project._id} className="group relative overflow-hidden">
-              <Link to={`/dashboard/project/${project._id}`}>
-                <CardHeader>
-                  <div className="flex items-start justify-between">
-                    <div className="space-y-1">
-                      <CardTitle className="line-clamp-1">
-                        {project.title}
-                      </CardTitle>
-                      <CardDescription className="line-clamp-2">
-                        {project.description || "No description"}
-                      </CardDescription>
+          {(dreamXProjects as any[]).map((project: any) => {
+            const ns = project.nodeStates;
+            const NODES = ["mediaUpload", "copywriting", "memeRecall", "storyboard", "bgmRecall", "ttsSelection", "capcutBuild"];
+            const completed = NODES.filter((k) => ns[k]?.status === "completed").length;
+
+            return (
+              <Card
+                key={project._id}
+                className="group relative overflow-hidden border-rose-500/20 hover:border-rose-500/40 transition-all"
+              >
+                <Link to={`/dashboard/dreamx/${project._id}`} className="block">
+                  <CardHeader className="pb-2">
+                    <div className="flex items-start justify-between">
+                      <div className="space-y-1 flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <div className="p-1 rounded bg-gradient-to-br from-rose-500/20 to-red-500/20 flex-shrink-0">
+                            <DreamXIcon className="h-3.5 w-3.5 text-rose-500" />
+                          </div>
+                          <CardTitle className="line-clamp-1 text-base">
+                            {project.title}
+                          </CardTitle>
+                        </div>
+                        {project.description && (
+                          <CardDescription className="line-clamp-1 text-xs">
+                            {project.description}
+                          </CardDescription>
+                        )}
+                      </div>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild onClick={(e) => e.preventDefault()}>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0"
+                          >
+                            <MoreVertical className="h-3.5 w-3.5" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem
+                            className="text-destructive"
+                            onClick={(e) => {
+                              e.preventDefault();
+                              handleDeleteDreamXProject(project._id);
+                            }}
+                          >
+                            删除
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
                     </div>
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild onClick={(e) => e.preventDefault()}>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="opacity-0 group-hover:opacity-100 transition-opacity"
-                        >
-                          <MoreVertical className="h-4 w-4" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuItem
-                          onClick={(e) => {
-                            e.preventDefault();
-                            handleArchive(project._id);
-                          }}
-                        >
-                          <Archive className="mr-2 h-4 w-4" />
-                          Archive
-                        </DropdownMenuItem>
-                        <DropdownMenuItem
-                          className="text-destructive"
-                          onClick={(e) => {
-                            e.preventDefault();
-                            handleDelete(project._id);
-                          }}
-                        >
-                          Delete
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </div>
-                </CardHeader>
-                <CardFooter>
-                  <div className="flex items-center text-sm text-muted-foreground">
-                    <Calendar className="mr-1 h-3 w-3" />
-                    {formatDistanceToNow(new Date(project.updatedAt), {
-                      addSuffix: true,
-                    })}
-                  </div>
-                </CardFooter>
-              </Link>
-            </Card>
-          ))}
+                  </CardHeader>
+
+                  <CardContent className="pb-3">
+                    {/* 节点分开进度条 */}
+                    <div className="space-y-1.5">
+                      <div className="flex items-center justify-between">
+                        <p className="text-[11px] text-muted-foreground">流水线进度</p>
+                        <p className="text-[11px] font-medium text-rose-600">
+                          {completed}/7 节点
+                        </p>
+                      </div>
+                      <div className="flex gap-0.5">
+                        {NODES.map((k) => (
+                          <div
+                            key={k}
+                            className={`flex-1 h-1.5 rounded-full transition-colors ${
+                              ns[k]?.status === "completed" ? "bg-rose-500"
+                                : ns[k]?.status === "generating" ? "bg-rose-300 animate-pulse"
+                                  : ns[k]?.status === "idle" ? "bg-muted-foreground/30"
+                                    : "bg-muted/50"
+                            }`}
+                          />
+                        ))}
+                      </div>
+                    </div>
+                  </CardContent>
+
+                  <CardFooter className="pt-0">
+                    <div className="flex items-center text-xs text-muted-foreground">
+                      <Calendar className="mr-1 h-3 w-3" />
+                      {formatDistanceToNow(new Date(project.updatedAt), { addSuffix: true })}
+                    </div>
+                  </CardFooter>
+                </Link>
+              </Card>
+            );
+          })}
         </div>
       )}
     </div>

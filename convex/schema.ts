@@ -196,4 +196,235 @@ export default defineSchema({
     .index("by_user", ["userId"])
     .index("by_project", ["projectId"])
     .index("by_video", ["videoId"]),
+
+  // ─── Story Canvas (Drama.Land-style pipeline) ───────────────────────────────
+  // Stores a single-episode story project with its 5-node pipeline state.
+  storyProjects: defineTable({
+    userId: v.string(),
+    title: v.string(),
+    description: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+    isArchived: v.boolean(),
+    // Pipeline node states – each node is unlocked only after the previous completes
+    nodeStates: v.object({
+      // Node 1: idea input
+      start: v.object({
+        status: v.union(v.literal("idle"), v.literal("completed")),
+        ideaText: v.optional(v.string()),
+        genre: v.optional(v.string()),
+        tone: v.optional(v.string()),
+      }),
+      // Node 2: AI-generated script
+      script: v.object({
+        status: v.union(v.literal("locked"), v.literal("idle"), v.literal("generating"), v.literal("completed"), v.literal("error")),
+        content: v.optional(v.string()),   // full script text
+        synopsis: v.optional(v.string()),  // one-line summary
+        errorMessage: v.optional(v.string()),
+      }),
+      // Node 3: characters
+      character: v.object({
+        status: v.union(v.literal("locked"), v.literal("idle"), v.literal("generating"), v.literal("completed"), v.literal("error")),
+        characters: v.optional(v.array(v.object({
+          name: v.string(),
+          role: v.string(),       // "protagonist" | "antagonist" | "supporting"
+          description: v.string(),
+          personality: v.string(),
+          visualPrompt: v.string(),
+        }))),
+        errorMessage: v.optional(v.string()),
+      }),
+      // Node 4: storyboard
+      storyboard: v.object({
+        status: v.union(v.literal("locked"), v.literal("idle"), v.literal("generating"), v.literal("completed"), v.literal("error")),
+        scenes: v.optional(v.array(v.object({
+          sceneNumber: v.number(),
+          description: v.string(),  // visual scene description
+          dialogue: v.optional(v.string()),
+          characters: v.array(v.string()),  // character names in scene
+          mood: v.string(),
+          cameraNote: v.optional(v.string()),
+        }))),
+        errorMessage: v.optional(v.string()),
+      }),
+      // Node 5: video segments list
+      segment: v.object({
+        status: v.union(v.literal("locked"), v.literal("idle"), v.literal("generating"), v.literal("completed"), v.literal("error")),
+        segments: v.optional(v.array(v.object({
+          segmentNumber: v.number(),
+          startTime: v.number(),    // seconds
+          endTime: v.number(),
+          sceneNumber: v.number(),
+          narration: v.string(),
+          videoPrompt: v.string(),  // Kling-style prompt
+          characters: v.array(v.string()),
+          mood: v.string(),
+        }))),
+        errorMessage: v.optional(v.string()),
+      }),
+    }),
+  })
+    .index("by_user", ["userId"])
+    .index("by_user_archived", ["userId", "isArchived"]),
+
+  // ─── DreamX AI 营销视频生成流水线 ────────────────────────────────────────────
+  dreamXProjects: defineTable({
+    userId: v.string(),
+    title: v.string(),
+    description: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+    isArchived: v.boolean(),
+    nodeStates: v.object({
+      mediaUpload: v.object({
+        status: v.union(v.literal("idle"), v.literal("generating"), v.literal("completed"), v.literal("error")),
+        images: v.optional(v.array(v.object({
+          storageId: v.id("_storage"),
+          url: v.string(),
+          fileName: v.string(),
+          width: v.optional(v.number()),
+          height: v.optional(v.number()),
+          aiDescription: v.optional(v.string()),
+        }))),
+        videos: v.optional(v.array(v.object({
+          storageId: v.id("_storage"),
+          url: v.string(),
+          fileName: v.string(),
+          durationMs: v.optional(v.number()),
+          fileSizeBytes: v.optional(v.number()),
+          aiDescription: v.optional(v.string()),
+        }))),
+        eventDescription: v.optional(v.string()),
+        moodPreference: v.optional(v.string()),
+        aiAnalysis: v.optional(v.string()),
+        emotionTags: v.optional(v.array(v.string())),
+        errorMessage: v.optional(v.string()),
+      }),
+      copywriting: v.object({
+        status: v.union(v.literal("locked"), v.literal("idle"), v.literal("generating"), v.literal("completed"), v.literal("error")),
+        script: v.optional(v.array(v.object({
+          text: v.string(),
+          durationMs: v.number(),
+          imageIndex: v.number(),
+          mood: v.optional(v.string()),
+        }))),
+        emotionTags: v.optional(v.array(v.string())),
+        errorMessage: v.optional(v.string()),
+      }),
+      memeRecall: v.object({
+        status: v.union(v.literal("locked"), v.literal("idle"), v.literal("generating"), v.literal("completed"), v.literal("error")),
+        suggestedMemes: v.optional(v.array(v.object({
+          url: v.string(),
+          name: v.string(),
+          mood: v.string(),
+          mediaId: v.optional(v.id("dreamXMedia")),
+          isBuiltin: v.boolean(),
+        }))),
+        selectedMemes: v.optional(v.array(v.object({
+          url: v.string(),
+          name: v.string(),
+          mood: v.string(),
+          insertAfterImageIndex: v.number(),
+          storageId: v.optional(v.id("_storage")),
+        }))),
+        skipped: v.optional(v.boolean()),
+      }),
+      storyboard: v.object({
+        status: v.union(v.literal("locked"), v.literal("idle"), v.literal("generating"), v.literal("completed"), v.literal("error")),
+        timeline: v.optional(v.array(v.object({
+          type: v.union(v.literal("image"), v.literal("meme")),
+          url: v.string(),
+          name: v.string(),
+          startMs: v.number(),
+          durationMs: v.number(),
+          groupId: v.optional(v.number()),  // 所属镜头组索引，用于 TTS/字幕编辑后整组 rebase
+          subtitles: v.optional(v.array(v.object({
+            text: v.string(),
+            startMs: v.number(),
+            durationMs: v.number(),
+            // 字幕级配音：TTS 按字幕条粒度生成后写入
+            voiceTrack: v.optional(v.object({
+              url: v.string(),
+              storageId: v.string(),
+              durationMs: v.number(),
+            })),
+          }))),
+          // 配音轨：TTS 按段生成后写入
+          voiceTrack: v.optional(v.object({
+            url: v.string(),
+            storageId: v.string(),
+            durationMs: v.number(),
+          })),
+        }))),
+        totalDurationMs: v.optional(v.number()),
+        directorNote: v.optional(v.string()),
+        errorMessage: v.optional(v.string()),
+      }),
+      bgmRecall: v.object({
+        status: v.union(v.literal("locked"), v.literal("idle"), v.literal("generating"), v.literal("completed"), v.literal("error")),
+        suggestedBgms: v.optional(v.array(v.object({
+          url: v.string(),
+          name: v.string(),
+          mood: v.string(),
+          durationMs: v.optional(v.number()),
+          mediaId: v.optional(v.id("dreamXMedia")),
+          isBuiltin: v.boolean(),
+        }))),
+        selectedBgm: v.optional(v.object({
+          url: v.string(),
+          name: v.string(),
+          durationMs: v.optional(v.number()),
+          startMs: v.optional(v.number()),   // BGM 在时间轴上的起始偏移（ms）
+          volume: v.number(),
+          storageId: v.optional(v.id("_storage")),
+        })),
+        skipped: v.optional(v.boolean()),
+      }),
+      ttsSelection: v.optional(v.object({
+        status: v.union(v.literal("locked"), v.literal("idle"), v.literal("generating"), v.literal("completed"), v.literal("error")),
+        ttsText: v.optional(v.string()),
+        subtitleSnapshot: v.optional(v.string()),  // 上次成功生成 TTS 时所有字幕文本的快照（用于判断是否需要重新编排）
+        recommendedVoices: v.optional(v.array(v.object({
+          voiceType: v.string(),
+          name: v.string(),
+          sampleAudioUrl: v.string(),
+          gender: v.string(),
+          description: v.string(),
+          avatarUrl: v.optional(v.string()),
+        }))),
+        selectedVoiceType: v.optional(v.string()),
+        selectedVoiceName: v.optional(v.string()),
+        audioStorageId: v.optional(v.id("_storage")),
+        audioUrl: v.optional(v.string()),
+        audioDurationMs: v.optional(v.number()),
+        errorMessage: v.optional(v.string()),
+      })),
+      capcutBuild: v.optional(v.object({
+        status: v.union(v.literal("locked"), v.literal("idle"), v.literal("generating"), v.literal("completed"), v.literal("error")),
+        storageId: v.optional(v.id("_storage")),
+        downloadUrl: v.optional(v.string()),
+        projectName: v.optional(v.string()),
+        errorMessage: v.optional(v.string()),
+      })),
+      jianyingBuild: v.optional(v.any()),
+    }),
+  })
+    .index("by_user", ["userId"])
+    .index("by_user_archived", ["userId", "isArchived"]),
+
+  dreamXMedia: defineTable({
+    type: v.union(v.literal("meme"), v.literal("bgm")),
+    name: v.string(),
+    mood: v.string(),
+    url: v.string(),
+    storageId: v.optional(v.id("_storage")),
+    isBuiltin: v.boolean(),
+    userId: v.optional(v.string()),
+    tags: v.optional(v.array(v.string())),
+    durationMs: v.optional(v.number()),
+    createdAt: v.number(),
+  })
+    .index("by_type_mood", ["type", "mood"])
+    .index("by_type_builtin", ["type", "isBuiltin"])
+    .index("by_user", ["userId"]),
 });

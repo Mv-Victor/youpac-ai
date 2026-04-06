@@ -17,6 +17,8 @@ export default [
     route("dashboard/settings", "routes/dashboard/settings.tsx"),
     // Story Canvas (Drama.Land-style pipeline) — NEW
     route("dashboard/story/:projectId", "routes/dashboard/story.$projectId.tsx"),
+    // DreamX AI 营销视频生成流水线
+    route("dashboard/dreamx/:projectId", "routes/dashboard/dreamx.$projectId.tsx"),
   ]),
   route("*", "routes/$.tsx"),
 ] satisfies RouteConfig;

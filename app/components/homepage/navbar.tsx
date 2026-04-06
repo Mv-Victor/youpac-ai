@@ -1,6 +1,6 @@
 "use client";
 import { UserButton } from "@clerk/react-router";
-import { Github, Menu, X } from "lucide-react";
+import { Menu, X } from "lucide-react";
 import React, { useCallback } from "react";
 import { Link } from "react-router";
 import { Button } from "~/components/ui/button";
@@ -70,7 +70,7 @@ export const Navbar = ({
                   className="flex items-center space-x-2 font-semibold text-xl"
                   prefetch="viewport"
                 >
-                  YouPac AI
+                  DreamX AI
                 </Link>
                 <div className="hidden sm:flex items-center gap-1.5 px-3 py-1 bg-muted/50 rounded-full">
                   <span className="relative flex h-2 w-2 items-center justify-center">
@@ -108,12 +108,28 @@ export const Navbar = ({
               </div>
               <div className="flex w-full flex-col space-y-3 sm:flex-row sm:gap-3 sm:space-y-0 md:w-fit">
                 <Link
-                  to="https://github.com/michaelshimeles/youpac-ai"
+                  to="https://x.com/Vcontinentloyal"
                   target="_blank"
                   rel="noopener noreferrer"
                   className="flex items-center justify-center"
                 >
-                  <Github className="w-5 h-5" />
+                  {/* X / Twitter */}
+                  <svg className="w-5 h-5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+                    <path fill="currentColor" d="M10.488 14.651L15.25 21h7l-7.858-10.478L20.93 3h-2.65l-5.117 5.886L8.75 3h-7l7.51 10.015L2.32 21h2.65zM16.25 19L5.75 5h2l10.5 14z" />
+                  </svg>
+                </Link>
+                <Link
+                  to="https://www.xiaohongshu.com/user/profile/69af9b54000000003303aceb"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center justify-center"
+                >
+                  {/* 小红书 */}
+                  <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <rect width="24" height="24" rx="6" fill="#FF2442"/>
+                    <path d="M17.5 7h-2v1.5h2V7zM7 7H5.5v10H7V7zm4.5 0H10v10h1.5V7zm5 3.5h-5V12h5v-1.5z" fill="white"/>
+                    <path d="M6.5 11.5h5v1.5h-5v-1.5z" fill="white"/>
+                  </svg>
                 </Link>
                 {loaderData?.isSignedIn ? (
                   <div className="flex items-center gap-3">

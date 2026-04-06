@@ -5,6 +5,10 @@ import tsconfigPaths from "vite-tsconfig-paths";
 
 export default defineConfig({
   plugins: [tailwindcss(), reactRouter(), tsconfigPaths()],
+  css: {
+    // Ensure @xyflow/react styles are not tree-shaken by Tailwind processing
+    preprocessorOptions: {},
+  },
   server: {
     host: "0.0.0.0",
     port: 5173,

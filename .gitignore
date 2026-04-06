@@ -6,3 +6,16 @@
 /build/
 
 .env.local
+.agents/
+.claude/
+.codeflicker/
+/convex/_generated/
+
+.claude.md
+.AGENTS.md
+
+/reference/
+
+/app/components/story-canvas/
+/convex/storyAI.ts
+/convex/storyCanvas.ts

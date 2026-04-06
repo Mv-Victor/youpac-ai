@@ -1,3 +1,4 @@
+@import "@xyflow/react/dist/style.css";
 @import "tailwindcss";
 @import "tw-animate-css";
 
@@ -183,4 +184,41 @@
 
 .before\:bg-shine-size::before {
   background-size: 300% 300%;
+}
+
+/* ── DreamX Hero Animations (浅色背景适配版) ── */
+@keyframes breathe {
+  0%, 100% { opacity: 0.5; transform: scale(1); }
+  50%       { opacity: 0.85; transform: scale(1.05); }
+}
+
+/* 浅色背景用红色+深色 text-shadow，保留视觉冲击感 */
+@keyframes hero-glow {
+  0%, 100% {
+    text-shadow:
+      0 0 30px rgba(192,3,28,0.25),
+      0 2px 8px rgba(0,0,0,0.12);
+  }
+  50% {
+    text-shadow:
+      0 0 50px rgba(192,3,28,0.45),
+      0 2px 12px rgba(0,0,0,0.18);
+  }
+}
+
+@keyframes fade-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.animate-breathe {
+  animation: breathe 6s ease-in-out infinite;
+}
+
+.animate-fade-in {
+  animation: fade-in 0.3s ease-out;
+}
+
+.animate-hero-glow {
+  animation: hero-glow 3s ease-in-out infinite;
 }

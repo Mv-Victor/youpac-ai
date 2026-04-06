@@ -215,6 +215,62 @@ http.route({
   }),
 });
 
+// ─── Admin: Upload media file directly (dev only) ─────────────────────────────
+// Usage: POST /admin/upload-media?type=meme&name=猫咪震惊1&mood=震惊
+// Body: raw file bytes, Content-Type header = mime type
+http.route({
+  path: "/admin/upload-media",
+  method: "POST",
+  handler: httpAction(async (ctx, request) => {
+    // Only allow in dev
+    if (process.env.CONVEX_ENV === "production") {
+      return new Response(JSON.stringify({ error: "Not available in production" }), { status: 403 });
+    }
+
+    const url = new URL(request.url);
+    const type = url.searchParams.get("type") as "meme" | "bgm" | null;
+    const name = url.searchParams.get("name");
+    const mood = url.searchParams.get("mood") ?? "通用";
+    const mimeType = request.headers.get("content-type") ?? "application/octet-stream";
+
+    if (!type || !name) {
+      return new Response(JSON.stringify({ error: "Missing type or name" }), { status: 400 });
+    }
+
+    try {
+      const fileBuffer = await request.arrayBuffer();
+      const blob = new Blob([fileBuffer], { type: mimeType });
+      const storageId = await ctx.storage.store(blob);
+      const fileUrl = await ctx.storage.getUrl(storageId);
+
+      if (!fileUrl) {
+        return new Response(JSON.stringify({ error: "Failed to get URL" }), { status: 500 });
+      }
+
+      // Check if already exists
+      const existing = await ctx.runQuery("dreamXMedia:getBuiltinByName" as any, { name });
+      if (!existing) {
+        await ctx.runMutation("dreamXMedia:insertBuiltinMedia" as any, {
+          type,
+          name,
+          mood,
+          url: fileUrl,
+          storageId,
+        });
+      }
+
+      return new Response(JSON.stringify({ ok: true, name, storageId, url: fileUrl, skipped: !!existing }), {
+        headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },
+      });
+    } catch (e) {
+      return new Response(JSON.stringify({ error: e instanceof Error ? e.message : "Unknown error" }), {
+        status: 500,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+  }),
+});
+
 // Log that routes are configured
 console.log("HTTP routes configured");
 
