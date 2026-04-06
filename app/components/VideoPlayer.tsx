@@ -137,10 +137,10 @@ const VideoPlayer = ({ src }: { src: string }) => {
                 {showControls && (
                     <motion.div
                         className="absolute bottom-0 mx-auto max-w-xl left-0 right-0 p-4 m-2 bg-[#11111198] backdrop-blur-md rounded-2xl"
-                        initial={{ y: 20, opacity: 0, filter: "blur(10px)" }}
-                        animate={{ y: 0, opacity: 1, filter: "blur(0px)" }}
-                        exit={{ y: 20, opacity: 0, filter: "blur(10px)" }}
-                        transition={{ duration: 0.6, ease: "circInOut", type: "spring" }}
+                        initial={{ y: 20, opacity: 0 }}
+                        animate={{ y: 0, opacity: 1 }}
+                        exit={{ y: 20, opacity: 0 }}
+                        transition={{ duration: 0.25, ease: "easeOut" }}
                     >
                         <div className="flex items-center gap-2 mb-2">
                             <span className="text-white text-sm">

@@ -21,15 +21,15 @@ interface LoaderData {
 
 const SHOWCASE_VIDEOS = [
     {
-        src: "https://dreamx-1301319986.cos.ap-shanghai.myqcloud.com/qwen-naicha2.mp4?q-sign-algorithm=sha1&q-ak=AKIDyyEpvVGtJcfNXZ15XVZvbJ7AkjVf9j8oVZjm0v3OwI2-jjBbKLiHmDJt9hXHn0op&q-sign-time=1775486039;1775489639&q-key-time=1775486039;1775489639&q-header-list=host&q-url-param-list=&q-signature=2655a39701e75647b347f1a091d5dbfc57b75809&x-cos-security-token=Kj7yRcFYXFMEsWLZwz7tTangmpu3kvba17f0a2b4463bed3149f8c8de5e305da9halMBpQ36H3v-Cg4kFTN2o6pWjr2XsaWkByeiuvCglDC4qzybGnAE73XwqVqDZ1OqF4yYG4OOeLqs8xpar-6OlJpYDeZqgK8eLWQV2GIi7q0rXXVTqRvBQGvK7nGjR_M3-MekHm2SKQzp3EttPn7YxwHx8FGxFHbeH_79tvBSPRoT3PVVKuExrg4EBpnVnWGwBlBpYYEWTGiup2dBJA3rjSLWVJDpWKqfqr0f26AJxW6vz3EmJrg03iNgGQ_6_8iGMR-WatttoER1kI0hAmspw&",
+        src: "https://dreamx-1301319986.cos.ap-shanghai.myqcloud.com/operator.mp4",
+        label: "openclaw 自部署效果",
+    },
+    {
+        src: "https://dreamx-1301319986.cos.ap-shanghai.myqcloud.com/qwen-naicha2.mp4",
         label: "AI 成片 - 千问奶茶事件 1",
     },
     {
-        src: "https://dreamx-1301319986.cos.ap-shanghai.myqcloud.com/operator.mp4?q-sign-algorithm=sha1&q-ak=AKIDi3TOT5PZbVXCOGIvu1SG8oDaK75hTykkFbroaUuw08QHDKv1dGFb14c5Z3GXvq6K&q-sign-time=1775486025;1775489625&q-key-time=1775486025;1775489625&q-header-list=host&q-url-param-list=&q-signature=1b404bf894acc08ee141c2e79993fe29045abf51&x-cos-security-token=Q5qiHJEaDC7mToXnLZti4jSEs6pcF4dad7cc0bec79aa35e7e2c975a23103a67cUot7_6t7o-3goJELn7j6p-Sw4d53-HZpW9UPFFTf3jzBtegg8NrP1tLofcN1AbxpAyVQB2XqzL7OcmTXcrKY7-dXbApEYUjMPNvteo0N76Esk36UMJ3YOe-0hTXykAM1iBqqsfhBibw7rZVF3xnPz1Xde-_5ciYpYDBTSq_nhK-3cfVuQn9HYLcnX03U5ZpCsQZ20pAxK1Bseo2VWyCmJtiYNq9IHrJftTZ4VBgVLWHnbme2h5wyyURYBqQ6WLiIIY_V1jysiLzW4JowoGfysw&",
-        label: "openclaw自部署效果",
-    },
-    {
-        src: "https://dreamx-1301319986.cos.ap-shanghai.myqcloud.com/qwen_naicha.mp4?q-sign-algorithm=sha1&q-ak=AKIDVCxLWZ-PKssoVxCmCCE2Et-o0fBeQYWf5BVlhf4pXnRL44CpTGX5IwmVet2LGpqE&q-sign-time=1775486048;1775489648&q-key-time=1775486048;1775489648&q-header-list=host&q-url-param-list=&q-signature=53cd5dbff520ab91631c57f3a118a54ce9b96241&x-cos-security-token=Q5qiHJEaDC7mToXnLZti4jSEs6pcF4da084bbe1a1394376b0554ea4c49d89fb2Uot7_6t7o-3goJELn7j6p3s__A0PpG3sCBGBNSo6qQNkGD_ovAbcPNe8ZYrKz4KC3vT6sXZ6hf4P1KROE1QYkcTVmkIsDUAuQrWqmaRyBOkmzOTzPWN3UlQU0v_BPR83Ul9E45H1U1vDQFi0TKkSxNwSGjM3fJ_zL_fXov4ROfQskcVWc0HGprIeH-uiadk_eaE7XZp24TAOKOCwmylWuYAoS9yUCTq9UY4-QMZP0Z7o0K3AnDmmJ5hOPE1X69bVbJo5Ruk7gdPQzQ8jLLHQtg&",
+        src: "https://dreamx-1301319986.cos.ap-shanghai.myqcloud.com/qwen_naicha.mp4",
         label: "AI 成片 - 千问奶茶事件 2",
     },
 ];
