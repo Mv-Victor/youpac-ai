@@ -206,7 +206,7 @@ export default function Page() {
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {(dreamXProjects as any[]).map((project: any) => {
             const ns = project.nodeStates;
-            const NODES = ["mediaUpload", "copywriting", "memeRecall", "storyboard", "bgmRecall", "ttsSelection", "capcutBuild"];
+            const NODES = ["mediaUpload", "memeRecall", "bgmRecall", "storyboard", "ttsSelection", "capcutBuild"];
             const completed = NODES.filter((k) => ns[k]?.status === "completed").length;
 
             return (
@@ -263,7 +263,7 @@ export default function Page() {
                       <div className="flex items-center justify-between">
                         <p className="text-[11px] text-muted-foreground">流水线进度</p>
                         <p className="text-[11px] font-medium text-rose-600">
-                          {completed}/7 节点
+                          {completed}/6 节点
                         </p>
                       </div>
                       <div className="flex gap-0.5">
