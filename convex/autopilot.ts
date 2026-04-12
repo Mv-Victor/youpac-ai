@@ -272,6 +272,42 @@ export const _markFailed = internalMutation({
   },
 });
 
+export const _updateJob = internalMutation({
+  args: {
+    jobId: v.id("autopilotJobs"),
+    patch: v.object({
+      currentNodeIndex: v.optional(v.number()),
+      retryCount: v.optional(v.number()),
+      pendingScheduledJobId: v.optional(v.union(v.id("_scheduled_functions"), v.null())),
+      confirmedNodeIndices: v.optional(v.array(v.number())),
+    }),
+  },
+  handler: async (ctx, args) => {
+    const job = await ctx.db.get(args.jobId);
+    if (!job) return;
+
+    // Build patch object, only including provided fields
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const update: any = { updatedAt: Date.now() };
+
+    if (args.patch.currentNodeIndex !== undefined) {
+      update.currentNodeIndex = args.patch.currentNodeIndex;
+    }
+    if (args.patch.retryCount !== undefined) {
+      update.retryCount = args.patch.retryCount;
+    }
+    if ("pendingScheduledJobId" in args.patch) {
+      // null means clear the field (set to undefined in Convex)
+      update.pendingScheduledJobId = args.patch.pendingScheduledJobId ?? undefined;
+    }
+    if (args.patch.confirmedNodeIndices !== undefined) {
+      update.confirmedNodeIndices = args.patch.confirmedNodeIndices;
+    }
+
+    await ctx.db.patch(args.jobId, update);
+  },
+});
+
 export const _scheduleNextStep = internalMutation({
   args: {
     projectId: v.id("dreamXProjects"),

@@ -34,7 +34,7 @@
 - [x] T005 [P] 在 `convex/autopilot.ts` 实现 `getAutopilotProjects` public query（返回当前用户所有 autopilotEnabled=true 或 autopilotFailed=true 的项目，含 failed 字段）
 - [x] T006 [P] 在 `convex/autopilot.ts` 实现 `_stopAutopilot` internalMutation（写 autopilotEnabled=false, autopilotFailed=false，删除 AutopilotJob）
 - [x] T007 [P] 在 `convex/autopilot.ts` 实现 `_markFailed` internalMutation（写 autopilotEnabled=false, autopilotFailed=true，删除 AutopilotJob）
-- [ ] T008 [P] 在 `convex/autopilot.ts` 实现 `_updateJob` internalMutation（通用 patch AutopilotJob 字段）
+- [x] T008 [P] 在 `convex/autopilot.ts` 实现 `_updateJob` internalMutation（通用 patch AutopilotJob 字段）
 - [ ] T009 [P] 在 `convex/autopilot.ts` 实现 `_scheduleNextStep` internalMutation（调度 runAutopilotStep，写 pendingScheduledJobId 到 job 记录）
 - [ ] T010 重写 `convex/autopilotActions.ts`：实现 `runAutopilotStep` internalAction（接收 `{ projectId, jobId }`，清空 pendingScheduledJobId，遍历 PIPELINE 执行完整调度链逻辑：全部完成→_stopAutopilot，error→_markFailed，retryCount≥30→_markFailed(timeout)，generating→retryCount++调度10s重试，idle且已在confirmedNodeIndices→跳过推进，idle未确认→执行handler追加索引）
 
