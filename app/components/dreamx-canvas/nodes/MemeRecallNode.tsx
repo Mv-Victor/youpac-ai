@@ -8,8 +8,8 @@ import {
 import { cn } from "~/lib/utils";
 import { DXNodeBase } from "../DXNodeBase";
 import type { DXNodeData } from "./pipeline.config";
-
-interface MemeItem {
+import { CreditsBadge } from "~/components/credits/CreditsBadge";
+import { useCredits } from "~/contexts/CreditsContext";interface MemeItem {
   url: string;
   name: string;
   mood: string;
@@ -34,23 +34,56 @@ const MemeRecallNode = memo(({ data }: MemeRecallNodeInnerProps) => {
   const [selections, setSelections] = useState<Array<{ meme: MemeItem; insertAfterImageIndex: number }>>([]);
   const [isUploading, setIsUploading] = useState(false);
   const [isSuggesting, setIsSuggesting] = useState(false);
-  // 额外追踪自定义上传的 meme（不依赖 query 刷新，直接 append 到 UI）
   const [customMemes, setCustomMemes] = useState<MemeItem[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const status = (data.nodeState as any).status;
   const isCompleted = data.isReadOnly;
+  const { balance, nodeCosts, autopilotEnabled } = useCredits();
+  const memeInsertCost = nodeCosts["memeInsert"] ?? 2;
+  const reRecallInsufficient = balance !== undefined && balance < memeInsertCost;
 
-  // 当 suggestedMemes 首次加载时，调用 AI 分析默认插入位置
+  const autopilotCalledRef = useRef(false);
+  useEffect(() => {
+    if (!autopilotEnabled) { autopilotCalledRef.current = false; return; }
+  }, [autopilotEnabled, status, data.suggestedMemes]);
+
+  // 当 suggestedMemes 变化（首次加载或重新召回）时，调用 AI 分析默认插入位置
   const suggestCalledRef = useRef(false);
+  const prevSuggestedMemesKeyRef = useRef<string>("");
   useEffect(() => {
     const memes = data.suggestedMemes;
     const imageUrls = data.imageUrls ?? [];
+    const memesKey = memes ? memes.map((m) => m.url).join(",") : "";
+
+    // 检测到新数据（内容变化），先清空旧选择并允许重新触发
+    if (memesKey !== prevSuggestedMemesKeyRef.current) {
+      prevSuggestedMemesKeyRef.current = memesKey;
+      suggestCalledRef.current = false;
+      setSelections([]);
+    }
+
+    // 如果 DB 中已有 selectedMemes（AI 已分析过），直接用 DB 数据初始化，不重新触发
+    if (data.selectedMemes && data.selectedMemes.length > 0 && memes) {
+      suggestCalledRef.current = true;
+      setSelections(
+        data.selectedMemes
+          .map((s) => {
+            const meme = memes.find((m) => m.url === s.url);
+            if (!meme) return null;
+            return { meme, insertAfterImageIndex: s.insertAfterImageIndex };
+          })
+          .filter(Boolean) as Array<{ meme: MemeItem; insertAfterImageIndex: number }>
+      );
+      return;
+    }
+
     if (
       !suggestCalledRef.current &&
       memes && memes.length > 0 &&
       imageUrls.length > 0 &&
       data.onSuggestInsertions &&
-      !isCompleted
+      !isCompleted &&
+      status === "idle"
     ) {
       suggestCalledRef.current = true;
       setIsSuggesting(true);
@@ -74,17 +107,7 @@ const MemeRecallNode = memo(({ data }: MemeRecallNodeInnerProps) => {
       }).finally(() => setIsSuggesting(false));
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [data.suggestedMemes]);
-
-  // 重新召回时重置 suggestCalledRef，让新数据加载后重新触发 AI 分析
-  const prevSuggestedMemesRef = useRef(data.suggestedMemes);
-  useEffect(() => {
-    if (prevSuggestedMemesRef.current !== data.suggestedMemes && data.suggestedMemes) {
-      prevSuggestedMemesRef.current = data.suggestedMemes;
-      suggestCalledRef.current = false;
-      setSelections([]);
-    }
-  }, [data.suggestedMemes]);
+  }, [data.suggestedMemes, data.selectedMemes, status]);
 
   const toggleMeme = (meme: MemeItem) => {
     setSelections((prev) => {
@@ -161,6 +184,8 @@ const MemeRecallNode = memo(({ data }: MemeRecallNodeInnerProps) => {
       nodeNum={2}
       isReadOnly={isCompleted}
       onReset={data.onReset}
+      resetNodeType={undefined}
+      resetImageCount={0}
     >
       {isCompleted && data.selectedMemes ? (
         <div className="space-y-2">
@@ -281,9 +306,10 @@ const MemeRecallNode = memo(({ data }: MemeRecallNodeInnerProps) => {
               size="sm"
               className="flex-1 text-xs h-7"
               onClick={data.onReRecall}
-              disabled={isCompleted || !data.onReRecall}
+              disabled={isCompleted || !data.onReRecall || reRecallInsufficient}
             >
               <RefreshCw className="mr-1 h-3 w-3" />重新召回
+              <CreditsBadge nodeType="memeInsert" />
             </Button>
             <Button
               variant="outline"

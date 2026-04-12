@@ -4,6 +4,8 @@ import { v } from "convex/values";
 import { action } from "./_generated/server";
 import { anthropic, DEFAULT_MODEL } from "./lib/anthropic";
 import { generateText } from "ai";
+import { internal } from "./_generated/api";
+import { ConvexError } from "convex/values";
 
 // ─── analyzeMediaBatch ────────────────────────────────────────────────────────
 
@@ -11,9 +13,19 @@ export const analyzeMediaBatch = action({
   args: {
     imageUrls: v.array(v.string()),
     eventDescription: v.optional(v.string()),
+    projectId: v.optional(v.id("dreamXProjects")),
   },
-  handler: async (_ctx, args) => {
+  handler: async (ctx, args) => {
     const { imageUrls, eventDescription } = args;
+    const identity = await ctx.auth.getUserIdentity();
+
+    if (identity) {
+      await (ctx.runMutation as any)(internal.credits.checkBalanceInternal, {
+        userId: identity.subject,
+        nodeType: "mediaUpload",
+        imageCount: imageUrls.length,
+      });
+    }
 
     // 把图片下载为 base64 data URL（Convex storage URL 有认证，Claude 代理无法直接访问）
     const imageContent: Array<{ type: "image"; image: string }> = [];
@@ -43,32 +55,92 @@ export const analyzeMediaBatch = action({
 
 事件描述：${eventDescription || "（请根据图片自行理解）"}
 
-请按以下格式输出：
+请按以下格式输出（所有内容总字数严格控制在400字以内，每图描述不超过20字）：
 
 【逐图理解】
-${imageContent.map((_, i) => `图${i + 1}：[1-2句，描述图片主要内容、场景、人物/产品特征]`).join("\n")}
+${imageContent.map((_, i) => `图${i + 1}：[简短描述，不超过20字]`).join("\n")}
 
 【综合分析】
-[2-3句，描述这组图片的整体主题、情绪氛围、营销价值点]
+[2句话，描述整体主题和营销价值点，不超过60字]
 
 【情绪标签】
 [从以下标签中选2-4个最匹配的，用逗号分隔]
 搞笑 / 震惊 / 励志 / 伤感 / 日常 / 可爱 / 委屈 / 愤怒 / 欢快`;
 
-    const { text } = await generateText({
-      model: anthropic(DEFAULT_MODEL),
-      system: "你是一名专业的短视频内容分析师，擅长理解图片内容并提炼营销价值。",
-      messages: [
-        {
-          role: "user",
-          content: [
-            ...imageContent,
-            { type: "text", text: userPrompt },
-          ],
-        },
-      ],
-      maxTokens: 1500,
-    });
+    let text: string;
+    try {
+      const result = await generateText({
+        model: anthropic(DEFAULT_MODEL),
+        system: "你是一名专业的短视频内容分析师，擅长理解图片内容并提炼营销价值。",
+        messages: [
+          {
+            role: "user",
+            content: [
+              ...imageContent,
+              { type: "text", text: userPrompt },
+            ],
+          },
+        ],
+        maxTokens: 600,
+        // 增加重试配置
+        maxRetries: 2,
+        // 设置超时（单位：毫秒）
+        abortSignal: AbortSignal.timeout(120000), // 120秒
+      });
+      text = result.text;
+    } catch (err: any) {
+      console.error("[analyzeMediaBatch] Claude API Error:", {
+        name: err.name,
+        message: err.message,
+        status: err.statusCode || err.status,
+        responseBody: err.responseBody,
+        cause: err.cause,
+        imageCount: imageContent.length,
+        totalBase64Size: imageContent.reduce((sum, img) => sum + img.image.length, 0),
+      });
+      
+      // 给用户友好的错误提示
+      if (err.statusCode === 524 || err.status === 524) {
+        throw new Error(
+          `图片分析超时（524错误）。\n` +
+          `原因：图片数量(${imageContent.length}张)或尺寸过大导致Claude API响应超时。\n` +
+          `建议：\n` +
+          `1. 减少图片数量（建议≤5张）\n` +
+          `2. 压缩图片尺寸（建议单张≤2MB）\n` +
+          `3. 稍后重试`
+        );
+      } else if (err.name === "AI_RetryError") {
+        throw new Error(
+          `Claude API调用失败（已重试${err.retryCount || 3}次）。\n` +
+          `最后错误：${err.message}\n` +
+          `图片数量：${imageContent.length}张\n` +
+          `请稍后重试或联系管理员检查API配置`
+        );
+      } else if (err.name === "TimeoutError" || err.message?.includes("timeout")) {
+        // 处理超时错误（120秒超时）
+        const totalSizeMB = (imageContent.reduce((sum, img) => sum + img.image.length, 0) / 1024 / 1024).toFixed(2);
+        throw new Error(
+          `图片分析超时（120秒）。\n` +
+          `当前状态：${imageContent.length}张图片，总大小${totalSizeMB}MB（Base64编码后约${(parseFloat(totalSizeMB) * 1.37).toFixed(2)}MB）\n` +
+          `建议：\n` +
+          `1. 减少图片数量（当前${imageContent.length}张，建议≤5张）\n` +
+          `2. 压缩图片尺寸（建议单张≤1MB）\n` +
+          `3. 分批上传处理`
+        );
+      } else {
+        throw new Error(`图片分析失败：${err.message || "未知错误"}`);
+      }
+    }
+
+    if (identity) {
+      await (ctx.runMutation as any)(internal.credits.deductCreditsInternal, {
+        userId: identity.subject,
+        nodeType: "mediaUpload",
+        imageCount: imageUrls.length,
+        projectId: args.projectId,
+        description: `分析素材（${imageUrls.length} 张图片）`,
+      });
+    }
 
     return text;
   },
@@ -89,7 +161,7 @@ export const generateCopywriting = action({
   handler: async (ctx, args) => {
     const { projectId, eventDescription, imageDescriptions, imageCount, moodPreference } = args;
 
-    await (ctx.runMutation as any)("dreamXCanvas:updateNodeState", {
+    await (ctx.runMutation as any)("dreamXCanvas:_updateNodeState", {
       id: projectId,
       nodeKey: "copywriting",
       patch: { status: "generating", errorMessage: undefined },
@@ -140,7 +212,7 @@ ${imageCount}张
         parsed = { emotionTags: found.length > 0 ? found.slice(0, 4) : ["日常"] };
       }
 
-      await (ctx.runMutation as any)("dreamXCanvas:updateNodeState", {
+      await (ctx.runMutation as any)("dreamXCanvas:_updateNodeState", {
         id: projectId,
         nodeKey: "copywriting",
         patch: {
@@ -152,7 +224,7 @@ ${imageCount}张
       });
 
       // Unlock memeRecall
-      await (ctx.runMutation as any)("dreamXCanvas:updateNodeState", {
+      await (ctx.runMutation as any)("dreamXCanvas:_updateNodeState", {
         id: projectId,
         nodeKey: "memeRecall",
         patch: { status: "idle" },
@@ -161,7 +233,7 @@ ${imageCount}张
       return { emotionTags: parsed.emotionTags };
     } catch (error) {
       const message = error instanceof Error ? error.message : "未知错误";
-      await (ctx.runMutation as any)("dreamXCanvas:updateNodeState", {
+      await (ctx.runMutation as any)("dreamXCanvas:_updateNodeState", {
         id: projectId,
         nodeKey: "copywriting",
         patch: { status: "error", errorMessage: message },
@@ -191,8 +263,17 @@ export const generateStoryboard = action({
   },
   handler: async (ctx, args) => {
     const { projectId, images, selectedMemes } = args;
+    const identity = await ctx.auth.getUserIdentity();
 
-    await (ctx.runMutation as any)("dreamXCanvas:updateNodeState", {
+    if (identity) {
+      await (ctx.runMutation as any)(internal.credits.checkBalanceInternal, {
+        userId: identity.subject,
+        nodeType: "storyboard",
+        imageCount: images.length,
+      });
+    }
+
+    await (ctx.runMutation as any)("dreamXCanvas:_updateNodeState", {
       id: projectId,
       nodeKey: "storyboard",
       patch: { status: "generating", errorMessage: undefined },
@@ -247,7 +328,7 @@ ${memeListText}
 5. 适当使用强动词：干掉、飞升、狂招、抢疯、被逼、疯抢
 
 **时间设置规则（重要）**：
-1. 每句字幕时长 = 字数 × 265ms，最小1500ms，最大5000ms
+1. 每句字幕时长 = 字数 × 255ms，最小1500ms，最大5000ms
 2. 高潮句用1500-2000ms（快切节奏），铺垫句用2500-3000ms
 3. 图片 durationMs ≥ 该图片对应的字幕时长之和（字幕不能比图片长太多）
 4. 表情包 durationMs 通常1200-2000ms（情绪高潮点可稍短以增加冲击感）
@@ -311,7 +392,7 @@ ${memeListText}
         if (!Array.isArray(groups) || groups.length === 0) throw new Error("no groups");
       } catch {
         // Fallback: 用旧格式构建
-        return buildFallbackAndSave(ctx, projectId, images, selectedMemes);
+        return buildFallbackAndSave(ctx, projectId, images, selectedMemes, identity?.subject);
       }
 
       // ─── 算法：将 group 结构展开为 flat timeline ───────────────────────────
@@ -403,7 +484,7 @@ ${memeListText}
 
       const totalDurationMs = currentMs;
 
-      await (ctx.runMutation as any)("dreamXCanvas:updateNodeState", {
+      await (ctx.runMutation as any)("dreamXCanvas:_updateNodeState", {
         id: projectId,
         nodeKey: "storyboard",
         patch: {
@@ -415,10 +496,20 @@ ${memeListText}
         },
       });
 
+      if (identity) {
+        await (ctx.runMutation as any)(internal.credits.deductCreditsInternal, {
+          userId: identity.subject,
+          nodeType: "storyboard",
+          imageCount: images.length,
+          projectId,
+          description: `生成分镜脚本（${images.length} 张图片）`,
+        }).catch(() => {});
+      }
+
       return { timeline: finalTimeline, totalDurationMs };
     } catch (error) {
       const message = error instanceof Error ? error.message : "未知错误";
-      await (ctx.runMutation as any)("dreamXCanvas:updateNodeState", {
+      await (ctx.runMutation as any)("dreamXCanvas:_updateNodeState", {
         id: projectId,
         nodeKey: "storyboard",
         patch: { status: "error", errorMessage: message },
@@ -433,7 +524,8 @@ async function buildFallbackAndSave(
   ctx: any,
   projectId: string,
   images: Array<{ url: string; fileName: string }>,
-  selectedMemes: Array<{ url: string; name: string; mood: string; insertAfterImageIndex: number }>
+  selectedMemes: Array<{ url: string; name: string; mood: string; insertAfterImageIndex: number }>,
+  userId?: string
 ) {
   const { timeline: llmTl, directorNote } = buildFallbackTimeline(images, selectedMemes);
 
@@ -477,7 +569,7 @@ async function buildFallbackAndSave(
 
   const totalDurationMs = currentMs;
 
-  await (ctx.runMutation as any)("dreamXCanvas:updateNodeState", {
+  await (ctx.runMutation as any)("dreamXCanvas:_updateNodeState", {
     id: projectId,
     nodeKey: "storyboard",
     patch: {
@@ -488,6 +580,16 @@ async function buildFallbackAndSave(
       errorMessage: undefined,
     },
   });
+
+  if (userId) {
+    await (ctx.runMutation as any)(internal.credits.deductCreditsInternal, {
+      userId,
+      nodeType: "storyboard",
+      imageCount: images.length,
+      projectId,
+      description: `生成分镜脚本（${images.length} 张图片）`,
+    }).catch(() => {});
+  }
 
   return { timeline: finalTimeline, totalDurationMs };
 }
@@ -592,14 +694,25 @@ export const generateTTSPerSegment = action({
   args: {
     projectId: v.id("dreamXProjects"),
     voiceType: v.string(),
-    // segments: 每段字幕 { text, itemIdx }，按分镜 timeline 顺序传入
     segments: v.array(v.object({
-      itemIdx: v.number(),   // timeline 中的片段索引
-      text: v.string(),      // 该段要合成的文字
+      itemIdx: v.number(),
+      text: v.string(),
     })),
+    subtitlesChanged: v.optional(v.boolean()),
+    imageCount: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
     const { projectId, voiceType, segments } = args;
+    const identity = await ctx.auth.getUserIdentity();
+    const totalChars = segments.reduce((sum, s) => sum + s.text.length, 0);
+
+    if (identity) {
+      await (ctx.runMutation as any)(internal.credits.checkBalanceInternal, {
+        userId: identity.subject,
+        nodeType: "ttsSelection",
+        charCount: totalChars,
+      });
+    }
 
     const appId = process.env.DOUBAO_SOUND_APP_ID;
     const accessToken = process.env.DOUBAO_SOUND_ACCESS_TOKEN;
@@ -607,7 +720,6 @@ export const generateTTSPerSegment = action({
       throw new Error("DOUBAO_SOUND_APP_ID 或 DOUBAO_SOUND_ACCESS_TOKEN 未配置");
     }
 
-    // 逐段调用 TTS，收集结果
     const results: Array<{
       itemIdx: number;
       storageId: string;
@@ -712,11 +824,30 @@ export const generateTTSPerSegment = action({
       }
     }
 
-    // 将结果写回 storyboard.timeline 的每个片段 voiceTrack
     await (ctx.runMutation as any)(
-      "dreamXCanvas:patchStoryboardVoiceTracks",
+      "dreamXCanvas:_patchStoryboardVoiceTracks",
       { projectId, voiceTracks: results }
     );
+
+    if (identity) {
+      const totalChars = segments.reduce((sum, s) => sum + s.text.length, 0);
+      if (args.subtitlesChanged) {
+        await (ctx.runMutation as any)(internal.credits.deductCreditsInternal, {
+          userId: identity.subject,
+          nodeType: "storyboard",
+          imageCount: args.imageCount ?? 0,
+          projectId,
+          description: "字幕变更重新生成分镜",
+        });
+      }
+      await (ctx.runMutation as any)(internal.credits.deductCreditsInternal, {
+        userId: identity.subject,
+        nodeType: "ttsSelection",
+        charCount: totalChars,
+        projectId,
+        description: `生成配音（${totalChars} 字）`,
+      });
+    }
 
     return { count: results.length };
   },
@@ -828,10 +959,19 @@ export const suggestMemeInsertions = action({
       name: v.string(),
       mood: v.string(),
     })),
+    projectId: v.optional(v.id("dreamXProjects")),
   },
-  handler: async (_ctx, args) => {
+  handler: async (ctx, args) => {
     const { imageUrls, memes } = args;
     if (!imageUrls.length || !memes.length) return [];
+
+    const identity = await ctx.auth.getUserIdentity();
+    if (identity) {
+      await (ctx.runMutation as any)(internal.credits.checkBalanceInternal, {
+        userId: identity.subject,
+        nodeType: "memeInsert",
+      });
+    }
 
     // 下载图片为 base64（最多取 6 张）
     const imageContent: Array<{ type: "image"; image: string }> = [];
@@ -886,14 +1026,35 @@ memeIndex 从 1 开始，对应上面候选列表的序号。只输出你认为�
       const jsonStr = text.replace(/^```json\n?/, "").replace(/\n?```$/, "").trim();
       const parsed: Array<{ memeIndex: number; insertAfterImageIndex: number }> = JSON.parse(jsonStr);
 
-      return parsed.map((item) => ({
+      const result = parsed.map((item) => ({
         memeUrl: memes[item.memeIndex - 1]?.url ?? "",
         insertAfterImageIndex: item.insertAfterImageIndex,
       })).filter((r) => r.memeUrl);
+
+      if (identity) {
+        await (ctx.runMutation as any)(internal.credits.deductCreditsInternal, {
+          userId: identity.subject,
+          nodeType: "memeInsert",
+          projectId: args.projectId,
+          description: "表情包插入位置分析",
+        });
+      }
+
+      return result;
     } catch {
       // Fallback: 只选第一个，插入到中间位置
       const fallbackMeme = memes[0];
       if (!fallbackMeme) return [];
+
+      if (identity) {
+        await (ctx.runMutation as any)(internal.credits.deductCreditsInternal, {
+          userId: identity.subject,
+          nodeType: "memeInsert",
+          projectId: args.projectId,
+          description: "表情包插入位置分析",
+        }).catch(() => {});
+      }
+
       return [{
         memeUrl: fallbackMeme.url,
         insertAfterImageIndex: Math.floor(imageUrls.length / 2) - 1,
@@ -952,7 +1113,7 @@ export const rebalanceStoryboardDurations = action({
 
     const userPrompt = `以下是当前短视频的分镜结构（图片/表情包顺序和字幕内容已固定，不能改变）。
 请根据字幕字数重新计算每条字幕的合理时长，并相应调整每个镜头（item）的时长，确保：
-1. 字幕时长 = 字数 × 265ms，最小1500ms，最大5000ms
+1. 字幕时长 = 字数 × 255ms，最小1500ms，最大5000ms
 2. 每个 Group 的所有 item 时长之和 ≥ 该 Group 内字幕时长最大覆盖范围（字幕不超出画面）
 3. 表情包 durationMs 1200-2000ms，图片 durationMs ≥ 对应字幕时长之和
 4. 图片/表情包顺序不变，只调整 durationMs
@@ -1048,7 +1209,7 @@ ${groupDesc}
     const newTotalDurationMs = currentMs;
 
     // 写回 DB
-    await (ctx.runMutation as any)("dreamXCanvas:updateNodeState", {
+    await (ctx.runMutation as any)("dreamXCanvas:_updateNodeState", {
       id: projectId,
       nodeKey: "storyboard",
       patch: {

@@ -12,6 +12,7 @@
 
 import { v } from "convex/values";
 import { action } from "./_generated/server";
+import { internal } from "./_generated/api";
 
 // ─── UUID helper (matches Java UuidUtils.next()) ──────────────────────────────
 
@@ -236,7 +237,6 @@ export const buildCapcutProject = action({
   },
   handler: async (ctx, args) => {
     const identity = await ctx.auth.getUserIdentity();
-    if (!identity) throw new Error("Unauthorized");
 
     // Use string-based function references to avoid circular api type inference
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -245,9 +245,18 @@ export const buildCapcutProject = action({
     });
     if (!project) throw new Error("Project not found");
 
+    const userId = identity?.subject ?? (project as any).userId;
+    if (!userId) throw new Error("Unauthorized");
+
+    await (ctx.runMutation as any)(internal.credits.checkBalanceInternal, {
+      userId,
+      nodeType: "capcutBuild",
+      imageCount: 0,
+    });
+
     // Mark as generating
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    await (ctx.runMutation as any)("dreamXCanvas:updateNodeState", {
+    await (ctx.runMutation as any)("dreamXCanvas:_updateNodeState", {
       id: args.projectId,
       nodeKey: "capcutBuild",
       patch: { status: "generating", errorMessage: undefined },
@@ -403,7 +412,7 @@ export const buildCapcutProject = action({
       if (!downloadUrl) throw new Error("Failed to get download URL");
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      await (ctx.runMutation as any)("dreamXCanvas:updateNodeState", {
+      await (ctx.runMutation as any)("dreamXCanvas:_updateNodeState", {
         id: args.projectId,
         nodeKey: "capcutBuild",
         patch: {
@@ -419,7 +428,7 @@ export const buildCapcutProject = action({
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unknown error";
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      await (ctx.runMutation as any)("dreamXCanvas:updateNodeState", {
+      await (ctx.runMutation as any)("dreamXCanvas:_updateNodeState", {
         id: args.projectId,
         nodeKey: "capcutBuild",
         patch: { status: "error", errorMessage: message },

@@ -19,6 +19,8 @@ export default [
     route("dashboard/story/:projectId", "routes/dashboard/story.$projectId.tsx"),
     // DreamX AI 营销视频生成流水线
     route("dashboard/dreamx/:projectId", "routes/dashboard/dreamx.$projectId.tsx"),
+    // 积分中心
+    route("dashboard/credits", "routes/dashboard/credits.tsx"),
   ]),
   route("*", "routes/$.tsx"),
 ] satisfies RouteConfig;

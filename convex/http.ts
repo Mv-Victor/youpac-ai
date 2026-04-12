@@ -2,6 +2,7 @@ import { anthropic } from "./lib/anthropic";
 import { streamText } from "ai";
 import { httpRouter } from "convex/server";
 import { httpAction } from "./_generated/server";
+import { internal } from "./_generated/api";
 
 export const chat = httpAction(async (ctx, req) => {
   // Extract the `messages` from the body of the request
@@ -273,6 +274,80 @@ http.route({
 
 // Log that routes are configured
 console.log("HTTP routes configured");
+
+// ─── Admin: Insert redeem codes ───────────────────────────────────────────────
+http.route({
+  path: "/admin/insert-redeem-codes",
+  method: "POST",
+  handler: httpAction(async (ctx, request) => {
+    const adminKey = request.headers.get("X-Admin-Key");
+    if (!adminKey || adminKey !== process.env.ADMIN_SECRET_KEY) {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+        status: 401,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+
+    let body: { codes: Array<{ code: string; type: string }> };
+    try {
+      body = await request.json();
+    } catch {
+      return new Response(JSON.stringify({ error: "Invalid JSON" }), {
+        status: 400,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+
+    const creditsMap: Record<string, number> = { trial: 30, vip: 150, svip: 500 };
+    const inserted: string[] = [];
+    const errors: Array<{ code: string; error: string }> = [];
+
+    for (const item of body.codes ?? []) {
+      const normalizedCode = item.code.toUpperCase().replace(/-/g, "");
+      const credits = creditsMap[item.type];
+      if (!credits) {
+        errors.push({ code: normalizedCode, error: `Unknown type: ${item.type}` });
+        continue;
+      }
+
+      try {
+        await ctx.runMutation(internal.credits.insertRedeemCode, {
+          code: normalizedCode,
+          type: item.type as "trial" | "vip" | "svip",
+          credits,
+        });
+        inserted.push(normalizedCode);
+      } catch (e: any) {
+        errors.push({ code: normalizedCode, error: e.message ?? "Unknown error" });
+      }
+    }
+
+    return new Response(JSON.stringify({ inserted: inserted.length, errors }), {
+      status: errors.length > 0 && inserted.length === 0 ? 400 : 200,
+      headers: { "Content-Type": "application/json" },
+    });
+  }),
+});
+
+// ─── Admin: Seed node credit configs ─────────────────────────────────────────
+http.route({
+  path: "/admin/seed-node-credit-configs",
+  method: "POST",
+  handler: httpAction(async (ctx, request) => {
+    const adminKey = request.headers.get("X-Admin-Key");
+    if (!adminKey || adminKey !== process.env.ADMIN_SECRET_KEY) {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+        status: 401,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+
+    const result = await ctx.runMutation(internal.credits.seedNodeCreditConfigs, {});
+    return new Response(JSON.stringify(result), {
+      headers: { "Content-Type": "application/json" },
+    });
+  }),
+});
 
 // Convex expects the router to be the default export of `convex/http.js`.
 export default http;

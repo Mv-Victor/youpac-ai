@@ -1,6 +1,6 @@
 import { useState, useRef } from "react";
 import { IconDashboard } from "@tabler/icons-react";
-import { Twitter, MessageCircle } from "lucide-react";
+import { Twitter, MessageCircle, Coins } from "lucide-react";
 import { Link } from "react-router";
 import { NavMain } from "./nav-main";
 import { NavUser } from "./nav-user";
@@ -23,6 +23,12 @@ const data = {
       title: "DreamX AI",
       url: "/dashboard",
       icon: IconDashboard,
+    },
+    {
+      title: "兑换码",
+      url: "/dashboard/credits",
+      icon: Coins,
+      showCredits: true,
     },
   ],
 };

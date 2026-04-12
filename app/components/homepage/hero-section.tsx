@@ -21,12 +21,12 @@ interface LoaderData {
 
 const SHOWCASE_VIDEOS = [
     {
-        src: "https://dreamx-1301319986.cos.ap-shanghai.myqcloud.com/operator.mp4",
-        label: "openclaw 自部署效果",
-    },
-    {
         src: "https://dreamx-1301319986.cos.ap-shanghai.myqcloud.com/qwen-naicha2.mp4",
         label: "AI 成片 - 千问奶茶事件 1",
+    },
+    {
+        src: "https://dreamx-1301319986.cos.ap-shanghai.myqcloud.com/operator.mp4",
+        label: "openclaw 自部署效果",
     },
     {
         src: "https://dreamx-1301319986.cos.ap-shanghai.myqcloud.com/qwen_naicha.mp4",
@@ -113,6 +113,38 @@ export default function HeroSection({ loaderData }: { loaderData: LoaderData }) 
                         </div>
                     </div>
                 )} */}
+
+                {/* Pricing Section */}
+                <div className="mt-16 mb-10">
+                    <h2 className="text-center text-2xl font-semibold mb-2">定价方案</h2>
+                    <p className="text-center text-muted-foreground text-sm mb-8">
+                        选择适合你的积分套餐，联系我们开始创作爆款内容
+                    </p>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 max-w-3xl mx-auto">
+                        <div className="rounded-xl border border-border bg-card/60 backdrop-blur-sm p-6 flex flex-col items-center text-center">
+                            <div className="text-sm text-muted-foreground mb-1">体验版</div>
+                            <div className="text-3xl font-bold mb-1">¥9.9</div>
+                            <div className="text-lg font-semibold text-primary mb-3">30 积分</div>
+                            <div className="text-xs text-muted-foreground mb-4">适合初次体验，快速上手 DreamX</div>
+                            <div className="text-xs text-muted-foreground mt-auto">获取兑换码请联系管理员</div>
+                        </div>
+                        <div className="rounded-xl border-2 border-primary bg-card/80 backdrop-blur-sm p-6 flex flex-col items-center text-center relative shadow-lg">
+                            <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-primary text-primary-foreground text-xs font-semibold px-3 py-0.5 rounded-full">推荐</div>
+                            <div className="text-sm text-muted-foreground mb-1">VIP</div>
+                            <div className="text-3xl font-bold mb-1">¥29.9</div>
+                            <div className="text-lg font-semibold text-primary mb-3">150 积分</div>
+                            <div className="text-xs text-muted-foreground mb-4">性价比最高，满足日常创作需求</div>
+                            <div className="text-xs text-muted-foreground mt-auto">获取兑换码请联系管理员</div>
+                        </div>
+                        <div className="rounded-xl border border-border bg-card/60 backdrop-blur-sm p-6 flex flex-col items-center text-center">
+                            <div className="text-sm text-muted-foreground mb-1">SVIP</div>
+                            <div className="text-3xl font-bold mb-1">¥79.9</div>
+                            <div className="text-lg font-semibold text-primary mb-3">500 积分</div>
+                            <div className="text-xs text-muted-foreground mb-4">超值大包，专业创作者首选</div>
+                            <div className="text-xs text-muted-foreground mt-auto">获取兑换码请联系管理员</div>
+                        </div>
+                    </div>
+                </div>
 
                 {/* Showcases Section */}
                 <div className="mt-14 mb-10">

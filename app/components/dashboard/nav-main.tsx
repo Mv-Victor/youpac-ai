@@ -1,4 +1,5 @@
 import { memo, useMemo } from "react";
+import type React from "react";
 import { type Icon } from "@tabler/icons-react";
 
 import { Link, useLocation } from "react-router";
@@ -9,6 +10,7 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
 } from "~/components/ui/sidebar";
+import { CreditsBalanceBadge } from "~/components/credits/CreditsBalanceBadge";
 
 export const NavMain = memo(({
   items,
@@ -16,7 +18,8 @@ export const NavMain = memo(({
   items: {
     title: string;
     url: string;
-    icon?: Icon;
+    icon?: Icon | React.ComponentType<any>;
+    showCredits?: boolean;
   }[];
 }) => {
   const location = useLocation();
@@ -43,6 +46,7 @@ export const NavMain = memo(({
                 <Link to={item.url} prefetch="intent">
                   {item.icon && <item.icon />}
                   <span>{item.title}</span>
+                  {item.showCredits && <CreditsBalanceBadge />}
                 </Link>
               </SidebarMenuButton>
             </SidebarMenuItem>

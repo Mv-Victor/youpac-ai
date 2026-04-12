@@ -275,6 +275,8 @@ export default defineSchema({
     createdAt: v.number(),
     updatedAt: v.number(),
     isArchived: v.boolean(),
+    autopilotEnabled: v.optional(v.boolean()),
+    autopilotScheduledJobId: v.optional(v.id("_scheduled_functions")),
     nodeStates: v.object({
       mediaUpload: v.object({
         status: v.union(v.literal("idle"), v.literal("generating"), v.literal("completed"), v.literal("error")),
@@ -411,6 +413,48 @@ export default defineSchema({
   })
     .index("by_user", ["userId"])
     .index("by_user_archived", ["userId", "isArchived"]),
+
+  redeemCodes: defineTable({
+    code: v.string(),
+    type: v.union(v.literal("trial"), v.literal("vip"), v.literal("svip")),
+    credits: v.number(),
+    isUsed: v.boolean(),
+    usedBy: v.optional(v.string()),
+    usedAt: v.optional(v.number()),
+    createdAt: v.number(),
+  })
+    .index("by_code", ["code"])
+    .index("by_used", ["isUsed"]),
+
+  userCredits: defineTable({
+    userId: v.string(),
+    balance: v.number(),
+    totalRedeemed: v.number(),
+    totalConsumed: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_user", ["userId"]),
+
+  creditsTransactions: defineTable({
+    userId: v.string(),
+    type: v.union(v.literal("redeem"), v.literal("consume")),
+    amount: v.number(),
+    codeId: v.optional(v.id("redeemCodes")),
+    nodeType: v.optional(v.string()),
+    projectId: v.optional(v.id("dreamXProjects")),
+    description: v.optional(v.string()),
+    createdAt: v.number(),
+  })
+    .index("by_user", ["userId"])
+    .index("by_user_created", ["userId", "createdAt"]),
+
+  nodeCreditConfigs: defineTable({
+    nodeType: v.string(),
+    baseCost: v.number(),
+    isEnabled: v.boolean(),
+    updatedAt: v.number(),
+  })
+    .index("by_nodeType", ["nodeType"]),
 
   dreamXMedia: defineTable({
     type: v.union(v.literal("meme"), v.literal("bgm")),

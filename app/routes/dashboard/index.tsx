@@ -3,7 +3,7 @@ import { useQuery, useMutation } from "convex/react";
 import { api } from "convex/_generated/api";
 import type { Id } from "convex/_generated/dataModel";
 import { useState } from "react";
-import { Plus, Calendar, MoreVertical, Clapperboard as DreamXIcon } from "lucide-react";
+import { Plus, Calendar, MoreVertical, Clapperboard as DreamXIcon, Sparkles } from "lucide-react";
 import { Button } from "~/components/ui/button";
 import {
   Card,
@@ -38,6 +38,7 @@ export default function Page() {
   // ── DreamX AI 营销视频工作流 ────────────────────────────────────────────────
   const dxApi = api as any;
   const dreamXProjects = useQuery(dxApi.dreamXCanvas.listProjects, { includeArchived: false });
+  const autopilotProjects = useQuery(dxApi.autopilot.getAutopilotProjects);
   const createDreamXProject = useMutation(dxApi.dreamXCanvas.createProject);
   const deleteDreamXProject = useMutation(dxApi.dreamXCanvas.deleteProject);
   const [isCreateDreamXOpen, setIsCreateDreamXOpen] = useState(false);
@@ -95,7 +96,7 @@ export default function Page() {
           <DialogTrigger asChild>
             <Button
               variant="outline"
-              className="gap-2 border-rose-500/30 hover:border-rose-500/60 hover:bg-rose-500/5"
+              className="gap-2 border-rose-500/30 hover:border-rose-500/60 hover:bg-rose-500/10 hover:shadow-md transition-all"
             >
               <Plus className="h-4 w-4 text-rose-500" />
               新建 DreamX 项目
@@ -195,7 +196,7 @@ export default function Page() {
             <Button
               onClick={() => setIsCreateDreamXOpen(true)}
               variant="outline"
-              className="gap-2 border-rose-500/30 hover:border-rose-500/60"
+              className="gap-2 border-rose-500/30 hover:border-rose-500/60 hover:bg-rose-500/10 hover:shadow-md transition-all"
             >
               <Plus className="h-4 w-4 text-rose-500" />
               新建 DreamX 项目
@@ -208,6 +209,7 @@ export default function Page() {
             const ns = project.nodeStates;
             const NODES = ["mediaUpload", "memeRecall", "bgmRecall", "storyboard", "ttsSelection", "capcutBuild"];
             const completed = NODES.filter((k) => ns[k]?.status === "completed").length;
+            const isAutopilot = (autopilotProjects ?? []).some((p: any) => p.projectId === project._id);
 
             return (
               <Card
@@ -225,6 +227,12 @@ export default function Page() {
                           <CardTitle className="line-clamp-1 text-base">
                             {project.title}
                           </CardTitle>
+                          {isAutopilot && (
+                            <span className="inline-flex items-center gap-0.5 text-[10px] font-medium px-1.5 py-0.5 rounded bg-violet-500/15 text-violet-600 border border-violet-500/20 flex-shrink-0">
+                              <Sparkles className="h-2.5 w-2.5 animate-pulse" />
+                              托管中
+                            </span>
+                          )}
                         </div>
                         {project.description && (
                           <CardDescription className="line-clamp-1 text-xs">

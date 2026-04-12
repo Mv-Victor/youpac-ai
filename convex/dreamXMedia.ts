@@ -128,20 +128,34 @@ export const getSuggestedBgms = query({
     const results: any[] = [];
     const seen = new Set<string>();
 
-    for (const tag of args.emotionTags) {
-      const bgms = await ctx.db
+    // 先加入用户上传的所有BGM（不限mood）
+    if (userId) {
+      const userBgms = await ctx.db
         .query("dreamXMedia")
-        .withIndex("by_type_mood", (q) => q.eq("type", "bgm").eq("mood", tag))
+        .withIndex("by_user", (q) => q.eq("userId", userId))
         .collect();
-      for (const m of bgms) {
-        if (!seen.has(m._id) && (m.isBuiltin || m.userId === userId)) {
+      for (const m of userBgms) {
+        if (m.type === "bgm" && !seen.has(m._id)) {
           seen.add(m._id);
           results.push(m);
         }
       }
     }
 
-    if (results.length < limit) {
+    for (const tag of args.emotionTags) {
+      const bgms = await ctx.db
+        .query("dreamXMedia")
+        .withIndex("by_type_mood", (q) => q.eq("type", "bgm").eq("mood", tag))
+        .collect();
+      for (const m of bgms) {
+        if (!seen.has(m._id) && m.isBuiltin) {
+          seen.add(m._id);
+          results.push(m);
+        }
+      }
+    }
+
+    if (results.filter((m) => m.isBuiltin).length < limit) {
       const more = await ctx.db
         .query("dreamXMedia")
         .withIndex("by_type_builtin", (q) => q.eq("type", "bgm").eq("isBuiltin", true))
@@ -151,7 +165,6 @@ export const getSuggestedBgms = query({
           seen.add(m._id);
           results.push(m);
         }
-        if (results.length >= limit) break;
       }
     }
 
@@ -168,7 +181,10 @@ export const getSuggestedBgms = query({
       return a;
     };
 
-    return shuffle(results).slice(0, limit);
+    const userResults = results.filter((m: any) => !m.isBuiltin);
+    const builtinResults = results.filter((m: any) => m.isBuiltin);
+    const shuffledBuiltin = shuffle(builtinResults);
+    return [...userResults, ...shuffledBuiltin.slice(0, limit)];
   },
 });
 

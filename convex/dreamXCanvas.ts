@@ -1,5 +1,6 @@
 import { v } from "convex/values";
-import { action, mutation, query } from "./_generated/server";
+import { action, mutation, query, internalMutation } from "./_generated/server";
+import { internal } from "./_generated/api";
 
 // Pipeline 新顺序：mediaUpload → memeRecall → bgmRecall → storyboard → ttsSelection → capcutBuild
 // copywriting 保留在数据库状态中（供 suggestedMemes/suggestedBgms 用），但不作为用户等待的节点
@@ -69,6 +70,101 @@ export const createProject = mutation({
   },
 });
 
+export const _patchStoryboardVoiceTracks = internalMutation({
+  args: {
+    projectId: v.id("dreamXProjects"),
+    voiceTracks: v.array(v.object({
+      itemIdx: v.number(),
+      storageId: v.string(),
+      url: v.string(),
+      durationMs: v.number(),
+    })),
+  },
+  handler: async (ctx, args) => {
+    const project = await ctx.db.get(args.projectId);
+    if (!project) return;
+
+    const ns = project.nodeStates as any;
+    const oldTimeline: any[] = ns.storyboard?.timeline ?? [];
+
+    type VoiceEntry = { url: string; storageId: string; durationMs: number };
+    type MapEntry = { item?: VoiceEntry; subs: Map<number, VoiceEntry> };
+    const itemVoiceMap = new Map<number, MapEntry>();
+
+    for (const vt of args.voiceTracks) {
+      const tiIdx = Math.floor(vt.itemIdx / 100000);
+      const subIdx = vt.itemIdx % 100000;
+      const entry: MapEntry = itemVoiceMap.get(tiIdx) ?? { subs: new Map() };
+      entry.subs.set(subIdx, { url: vt.url, storageId: vt.storageId, durationMs: vt.durationMs });
+      if (subIdx === 0 || !entry.item) {
+        entry.item = { url: vt.url, storageId: vt.storageId, durationMs: vt.durationMs };
+      }
+      itemVoiceMap.set(tiIdx, entry);
+    }
+
+    const newTimeline = oldTimeline.map((item: any, i: number) => {
+      const entry = itemVoiceMap.get(i);
+      if (!entry) return item;
+
+      let newSubs = item.subtitles;
+      if (entry.subs.size > 0 && Array.isArray(item.subtitles)) {
+        newSubs = item.subtitles.map((sub: any, j: number) => {
+          const sv = entry.subs.get(j);
+          if (!sv) return sub;
+          return { ...sub, voiceTrack: { url: sv.url, storageId: sv.storageId, durationMs: sv.durationMs } };
+        });
+      }
+
+      const itemVoice = entry.item
+        ? { url: entry.item.url, storageId: entry.item.storageId, durationMs: entry.item.durationMs }
+        : item.voiceTrack;
+
+      return { ...item, subtitles: newSubs, voiceTrack: itemVoice };
+    });
+
+    await ctx.db.patch(args.projectId, {
+      updatedAt: Date.now(),
+      nodeStates: { ...ns, storyboard: { ...(ns.storyboard ?? {}), timeline: newTimeline } },
+    });
+  },
+});
+
+export const _updateNodeState = internalMutation({  args: {
+    id: v.id("dreamXProjects"),
+    nodeKey: v.union(
+      v.literal("mediaUpload"),
+      v.literal("copywriting"),
+      v.literal("memeRecall"),
+      v.literal("storyboard"),
+      v.literal("bgmRecall"),
+      v.literal("ttsSelection"),
+      v.literal("capcutBuild")
+    ),
+    patch: v.any(),
+  },
+  handler: async (ctx, args) => {
+    const project = await ctx.db.get(args.id);
+    if (!project) return;
+
+    const ns = project.nodeStates as any;
+    const updated = {
+      ...ns,
+      [args.nodeKey]: { ...(ns[args.nodeKey] ?? {}), ...args.patch },
+    };
+
+    if (args.patch.status === "completed") {
+      const PIPELINE_KEYS = ["mediaUpload", "memeRecall", "bgmRecall", "storyboard", "ttsSelection", "capcutBuild"];
+      const idx = PIPELINE_KEYS.indexOf(args.nodeKey);
+      if (idx >= 0 && idx < PIPELINE_KEYS.length - 1) {
+        const next = PIPELINE_KEYS[idx + 1];
+        updated[next] = { ...(updated[next] ?? {}), status: "idle" };
+      }
+    }
+
+    await ctx.db.patch(args.id, { nodeStates: updated, updatedAt: Date.now() });
+  },
+});
+
 export const deleteProject = mutation({
   args: { id: v.id("dreamXProjects") },
   handler: async (ctx, args) => {
@@ -116,6 +212,19 @@ export const updateNodeState = mutation({
     }
 
     await ctx.db.patch(args.id, { nodeStates: updated, updatedAt: Date.now() });
+
+    if ((project as any).autopilotEnabled) {
+      const oldJobId = (project as any).autopilotScheduledJobId;
+      if (oldJobId) {
+        try { await ctx.scheduler.cancel(oldJobId); } catch {}
+      }
+      const jobId = await ctx.scheduler.runAfter(
+        1000,
+        internal.autopilotActions.runAutopilotStep,
+        { projectId: args.id }
+      );
+      await ctx.db.patch(args.id, { autopilotScheduledJobId: jobId, updatedAt: Date.now() });
+    }
   },
 });
 
@@ -365,9 +474,24 @@ export const resetFromNode = mutation({
     const updated = { ...ns };
 
     // 当前节点重置为 idle
-    updated[args.fromNodeKey] = {
-      status: args.fromNodeKey === "mediaUpload" ? "idle" : "idle",
-    };
+    if (args.fromNodeKey === "ttsSelection") {
+      // TTS 重置时保留 subtitleSnapshot，以便下次生成时能正确检测字幕变化
+      updated[args.fromNodeKey] = {
+        ...ns[args.fromNodeKey],
+        status: "idle",
+        selectedVoiceType: undefined,
+        selectedVoiceName: undefined,
+        audioStorageId: undefined,
+        audioUrl: undefined,
+        audioDurationMs: undefined,
+        skipped: undefined,
+        // subtitleSnapshot 保留，用于下次检测字幕是否变化
+      };
+    } else {
+      updated[args.fromNodeKey] = {
+        status: args.fromNodeKey === "mediaUpload" ? "idle" : "idle",
+      };
+    }
 
     // 后续节点全部锁定
     for (let i = fromIdx + 1; i < FULL_PIPELINE.length; i++) {
@@ -376,6 +500,19 @@ export const resetFromNode = mutation({
     }
 
     await ctx.db.patch(args.id, { nodeStates: updated, updatedAt: Date.now() });
+
+    if ((project as any).autopilotEnabled) {
+      const oldJobId = (project as any).autopilotScheduledJobId;
+      if (oldJobId) {
+        try { await ctx.scheduler.cancel(oldJobId); } catch {}
+      }
+      const jobId = await ctx.scheduler.runAfter(
+        1000,
+        internal.autopilotActions.runAutopilotStep,
+        { projectId: args.id }
+      );
+      await ctx.db.patch(args.id, { autopilotScheduledJobId: jobId, updatedAt: Date.now() });
+    }
   },
 });
 
@@ -472,6 +609,123 @@ export const patchStoryboardVoiceTracks = mutation({
       nodeStates: {
         ...ns,
         storyboard: { ...(ns.storyboard ?? {}), timeline: newTimeline },
+      },
+    });
+  },
+});
+
+// ─── Internal mutations for autopilot (no auth required) ─────────────────────
+
+export const _completeMemeRecall = internalMutation({
+  args: {
+    id: v.id("dreamXProjects"),
+    selectedMemes: v.array(v.object({
+      url: v.string(),
+      name: v.string(),
+      mood: v.string(),
+      insertAfterImageIndex: v.number(),
+    })),
+  },
+  handler: async (ctx, args) => {
+    const project = await ctx.db.get(args.id);
+    if (!project) return;
+    const ns = project.nodeStates as any;
+    await ctx.db.patch(args.id, {
+      updatedAt: Date.now(),
+      nodeStates: {
+        ...ns,
+        memeRecall: { ...(ns.memeRecall ?? {}), status: "completed", selectedMemes: args.selectedMemes },
+        bgmRecall: { ...(ns.bgmRecall ?? {}), status: "idle" },
+      },
+    });
+  },
+});
+
+export const _completeBgmRecall = internalMutation({
+  args: {
+    id: v.id("dreamXProjects"),
+    selectedBgm: v.optional(v.object({
+      url: v.string(),
+      name: v.string(),
+      durationMs: v.optional(v.number()),
+      startMs: v.optional(v.number()),
+      volume: v.number(),
+      storageId: v.optional(v.id("_storage")),
+    })),
+    skipped: v.optional(v.boolean()),
+  },
+  handler: async (ctx, args) => {
+    const project = await ctx.db.get(args.id);
+    if (!project) return;
+    const ns = project.nodeStates as any;
+    await ctx.db.patch(args.id, {
+      updatedAt: Date.now(),
+      nodeStates: {
+        ...ns,
+        bgmRecall: { ...(ns.bgmRecall ?? {}), status: "completed", selectedBgm: args.selectedBgm, skipped: args.skipped },
+        storyboard: { ...(ns.storyboard ?? {}), status: "idle" },
+      },
+    });
+  },
+});
+
+export const _completeStoryboard = internalMutation({
+  args: {
+    id: v.id("dreamXProjects"),
+    timeline: v.any(),
+    totalDurationMs: v.number(),
+  },
+  handler: async (ctx, args) => {
+    const project = await ctx.db.get(args.id);
+    if (!project) return;
+    const ns = project.nodeStates as any;
+    await ctx.db.patch(args.id, {
+      updatedAt: Date.now(),
+      nodeStates: {
+        ...ns,
+        storyboard: {
+          ...(ns.storyboard ?? {}),
+          status: "completed",
+          timeline: args.timeline,
+          totalDurationMs: args.totalDurationMs,
+        },
+        ttsSelection: { ...(ns.ttsSelection ?? {}), status: "idle" },
+      },
+    });
+  },
+});
+
+export const _completeTTSSelection = internalMutation({
+  args: {
+    id: v.id("dreamXProjects"),
+    selectedVoiceType: v.string(),
+    selectedVoiceName: v.string(),
+    audioStorageId: v.optional(v.id("_storage")),
+    audioUrl: v.string(),
+    audioDurationMs: v.number(),
+    skipped: v.optional(v.boolean()),
+    subtitleSnapshot: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const project = await ctx.db.get(args.id);
+    if (!project) return;
+    const ns = project.nodeStates as any;
+    await ctx.db.patch(args.id, {
+      updatedAt: Date.now(),
+      nodeStates: {
+        ...ns,
+        ttsSelection: {
+          ...(ns.ttsSelection ?? {}),
+          status: "completed",
+          selectedVoiceType: args.selectedVoiceType,
+          selectedVoiceName: args.selectedVoiceName,
+          audioStorageId: args.audioStorageId,
+          audioUrl: args.audioUrl,
+          audioDurationMs: args.audioDurationMs,
+          skipped: args.skipped,
+          subtitleSnapshot: args.subtitleSnapshot,
+        },
+        capcutBuild: { ...(ns.capcutBuild ?? {}), status: "idle" },
       },
     });
   },

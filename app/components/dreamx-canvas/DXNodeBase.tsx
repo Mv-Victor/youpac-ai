@@ -4,6 +4,7 @@ import { Handle, Position } from "@xyflow/react";
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
 import { cn } from "~/lib/utils";
+import { CreditsBadge } from "~/components/credits/CreditsBadge";
 
 export type DXNodeStatus = "idle" | "locked" | "generating" | "completed" | "error";
 
@@ -18,6 +19,12 @@ interface BaseNodeProps {
   isLast?: boolean;
   isReadOnly?: boolean;
   onReset?: () => void;
+  /** 重置后会触发的节点类型（用于显示积分标识） */
+  resetNodeType?: string;
+  /** 重置后会触发的节点涉及图片数（用于计算附加积分） */
+  resetImageCount?: number;
+  /** 是否禁用重置按钮（如积分不足） */
+  resetDisabled?: boolean;
 }
 
 export const DXNodeBase = memo(
@@ -32,6 +39,9 @@ export const DXNodeBase = memo(
     isLast = false,
     isReadOnly = false,
     onReset,
+    resetNodeType,
+    resetImageCount = 0,
+    resetDisabled = false,
   }: BaseNodeProps) => {
     const [expanded, setExpanded] = useState(status !== "locked");
 
@@ -103,9 +113,11 @@ export const DXNodeBase = memo(
                   e.stopPropagation();
                   onReset();
                 }}
+                disabled={resetDisabled}
               >
                 <RotateCcw className="h-3 w-3 mr-1" />
                 重置
+                {resetNodeType && <CreditsBadge nodeType={resetNodeType} imageCount={resetImageCount} />}
               </Button>
             )}
             <Badge variant={statusBadge.variant} className="text-xs">

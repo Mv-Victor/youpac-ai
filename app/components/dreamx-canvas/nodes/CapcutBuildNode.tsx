@@ -1,8 +1,9 @@
-import { memo, useState, useCallback } from "react";
+import { memo, useState, useCallback, useEffect, useRef } from "react";
 import { Film, Loader2, RefreshCw, Download, CheckCircle2 } from "lucide-react";
 import { Button } from "~/components/ui/button";
 import { DXNodeBase } from "../DXNodeBase";
 import type { DXNodeData } from "./pipeline.config";
+import { useCredits } from "~/contexts/CreditsContext";
 
 interface CapcutBuildNodeInnerProps {
   data: DXNodeData & {
@@ -19,8 +20,13 @@ const CapcutBuildNode = memo(({ data }: CapcutBuildNodeInnerProps) => {
   const isCompleted = data.isReadOnly;
   const isGenerating = status === "generating";
   const [isDownloading, setIsDownloading] = useState(false);
+  const { autopilotEnabled } = useCredits();
 
-  // Convex Storage URL 是跨域的，<a download> 无效，需要 fetch → Blob → createObjectURL
+  const autopilotCalledRef = useRef(false);
+  useEffect(() => {
+    if (!autopilotEnabled) { autopilotCalledRef.current = false; return; }
+  }, [autopilotEnabled, status]);
+
   const handleDownload = useCallback(async () => {
     if (!data.downloadUrl) return;
     setIsDownloading(true);

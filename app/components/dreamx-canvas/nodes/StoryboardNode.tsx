@@ -5,6 +5,9 @@ import { Button } from "~/components/ui/button";
 import { cn } from "~/lib/utils";
 import { DXNodeBase } from "../DXNodeBase";
 import type { DXNodeData } from "./pipeline.config";
+import { CreditsBadge } from "~/components/credits/CreditsBadge";
+import { useCredits } from "~/contexts/CreditsContext";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "~/components/ui/tooltip";
 
 const PX_PER_SEC = 52;    // 每秒像素宽度
 const TRACK_HEIGHT = 36;  // 轨道高度
@@ -224,13 +227,6 @@ function SubtitleEditPopup({ text, anchorRect, onSave, onDelete, onClose }: Subt
         className="w-full rounded-lg bg-zinc-800 border border-violet-500/40 px-2 py-1.5 text-xs text-white outline-none focus:border-violet-400 focus:ring-1 focus:ring-violet-400/30"
         maxLength={50}
       />
-      <button
-        type="button"
-        onMouseDown={(e) => { e.stopPropagation(); e.preventDefault(); commitRef.current = true; onDelete(); }}
-        className="mt-1.5 w-full rounded-md bg-red-500/20 hover:bg-red-500/30 border border-red-500/30 text-red-400 text-[10px] py-1 transition-colors"
-      >
-        删除此字幕
-      </button>
     </div>,
     document.body
   );
@@ -831,6 +827,18 @@ const StoryboardNode = memo(({ data }: StoryboardNodeInnerProps) => {
   const isCompleted = data.isReadOnly;
   const isGenerating = status === "generating";
   const hasTimeline = !!(data.timeline && data.timeline.length > 0);
+  const { balance, nodeCosts, autopilotEnabled } = useCredits();
+
+  const imageCount = data.timeline?.filter((t) => t.type === "image").length ?? 0;
+  const baseCost = nodeCosts["storyboard"] ?? 3;
+  const imageBonus = imageCount > 0 ? Math.ceil(imageCount / 3) : 0;
+  const totalCost = baseCost + imageBonus;
+  const insufficientCredits = balance !== undefined && balance < totalCost;
+
+  const autopilotCalledRef = useRef(false);
+  useEffect(() => {
+    if (!autopilotEnabled) { autopilotCalledRef.current = false; return; }
+  }, [autopilotEnabled, status, hasTimeline]);
 
   return (
     <DXNodeBase
@@ -841,6 +849,9 @@ const StoryboardNode = memo(({ data }: StoryboardNodeInnerProps) => {
       nodeNum={4}
       isReadOnly={isCompleted}
       onReset={data.onReset}
+      resetNodeType="storyboard"
+      resetImageCount={imageCount}
+      resetDisabled={insufficientCredits}
     >
       {isGenerating && (
         <div className="flex items-center gap-2 rounded-lg bg-amber-500/10 border border-amber-500/20 px-3 py-2.5">
@@ -856,9 +867,18 @@ const StoryboardNode = memo(({ data }: StoryboardNodeInnerProps) => {
               {String((data.nodeState as any).errorMessage ?? data.errorMessage ?? "生成失败")}
             </p>
           </div>
-          <Button size="sm" className="w-full" onClick={data.onRegenerate}>
-            <RefreshCw className="mr-1.5 h-3.5 w-3.5" /> 重新生成
-          </Button>
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span className="w-full">
+                  <Button size="sm" className="w-full" onClick={data.onRegenerate} disabled={insufficientCredits}>
+                    <RefreshCw className="mr-1.5 h-3.5 w-3.5" /> 重新生成<CreditsBadge nodeType="storyboard" imageCount={imageCount} />
+                  </Button>
+                </span>
+              </TooltipTrigger>
+              {insufficientCredits && <TooltipContent>积分不足，请前往兑换码页面</TooltipContent>}
+            </Tooltip>
+          </TooltipProvider>
         </div>
       )}
 
@@ -875,9 +895,18 @@ const StoryboardNode = memo(({ data }: StoryboardNodeInnerProps) => {
             onDeleteSubtitle={data.onDeleteSubtitle}
           />
           {!isCompleted && (
-            <Button size="sm" variant="outline" className="w-full text-xs mt-1.5" onClick={data.onRegenerate}>
-              <RefreshCw className="h-3 w-3 mr-1.5" /> 重新生成分镜
-            </Button>
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span className="w-full">
+                    <Button size="sm" variant="outline" className="w-full text-xs mt-1.5" onClick={data.onRegenerate} disabled={insufficientCredits}>
+                      <RefreshCw className="h-3 w-3 mr-1.5" /> 重新生成分镜<CreditsBadge nodeType="storyboard" imageCount={imageCount} />
+                    </Button>
+                  </span>
+                </TooltipTrigger>
+                {insufficientCredits && <TooltipContent>积分不足，请前往兑换码页面</TooltipContent>}
+              </Tooltip>
+            </TooltipProvider>
           )}
         </>
       )}

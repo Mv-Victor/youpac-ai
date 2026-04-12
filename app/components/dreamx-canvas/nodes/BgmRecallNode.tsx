@@ -1,4 +1,4 @@
-import { memo, useState, useRef, useCallback } from "react";
+import { memo, useState, useRef, useCallback, useEffect } from "react";
 import { Music, Upload, CheckCircle2, Play, Pause, RefreshCw } from "lucide-react";
 import { Button } from "~/components/ui/button";
 import {
@@ -7,6 +7,8 @@ import {
 import { cn } from "~/lib/utils";
 import { DXNodeBase } from "../DXNodeBase";
 import type { DXNodeData } from "./pipeline.config";
+import { CreditsBadge } from "~/components/credits/CreditsBadge";
+import { useCredits } from "~/contexts/CreditsContext";
 
 const MOOD_OPTIONS = ["搞笑", "励志", "伤感", "震惊", "日常", "愤怒", "可爱", "委屈"];
 
@@ -32,16 +34,26 @@ interface BgmRecallNodeInnerProps {
 
 const BgmRecallNode = memo(({ data }: BgmRecallNodeInnerProps) => {
   const [selectedBgmUrl, setSelectedBgmUrl] = useState(data.selectedBgm?.url ?? "");
-  const [volume, setVolume] = useState(data.selectedBgm?.volume ?? -30);
+  const [volume, setVolume] = useState(data.selectedBgm?.volume ?? -35);
   const [uploadMood, setUploadMood] = useState("励志");
   const [isUploading, setIsUploading] = useState(false);
   const [playingUrl, setPlayingUrl] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
-  // 额外追踪自定义上传的 BGM（不依赖 query 刷新，直接 append 到 UI）
   const [customBgms, setCustomBgms] = useState<BgmItem[]>([]);
   const status = (data.nodeState as any).status;
   const isCompleted = data.isReadOnly;
+  const { balance, nodeCosts, autopilotEnabled } = useCredits();
+  const imageCount = (data.allNodeStates as any)?.mediaUpload?.images?.length ?? 0;
+  const storyboardBaseCost = nodeCosts["storyboard"] ?? 3;
+  const storyboardBonus = imageCount > 4 ? Math.ceil((imageCount - 4) / 2) : 0;
+  const storyboardCost = storyboardBaseCost + storyboardBonus;
+  const insufficientCredits = balance !== undefined && balance < storyboardCost;
+
+  const autopilotCalledRef = useRef(false);
+  useEffect(() => {
+    if (!autopilotEnabled) { autopilotCalledRef.current = false; return; }
+  }, [autopilotEnabled, status, data.suggestedBgms]);
 
   const handleConfirm = () => {
     if (!selectedBgmUrl) {
@@ -102,6 +114,8 @@ const BgmRecallNode = memo(({ data }: BgmRecallNodeInnerProps) => {
       nodeNum={3}
       isReadOnly={isCompleted}
       onReset={data.onReset}
+      resetNodeType={undefined}
+      resetImageCount={0}
     >
       <audio
         ref={audioRef}
@@ -233,8 +247,8 @@ const BgmRecallNode = memo(({ data }: BgmRecallNodeInnerProps) => {
             >
               跳过
             </Button>
-            <Button size="sm" className="flex-1 text-xs h-7" onClick={handleConfirm} disabled={data.isReadOnly}>
-              <CheckCircle2 className="mr-1 h-3 w-3" /> 确认
+            <Button size="sm" className="flex-1 text-xs h-7" onClick={handleConfirm} disabled={data.isReadOnly || insufficientCredits}>
+              <CheckCircle2 className="mr-1 h-3 w-3" /> 确认<CreditsBadge nodeType="storyboard" imageCount={imageCount} />
             </Button>
           </div>
         </div>

@@ -8,6 +8,8 @@ import { Link } from "react-router";
 import { Button } from "~/components/ui/button";
 import { PIPELINE_CONFIG, PIPELINE, NODE_POSITIONS } from "./nodes/pipeline.config";
 import { toUserMessage } from "~/lib/convex-error";
+import { CreditsProvider, useCredits } from "~/contexts/CreditsContext";
+import { AutopilotSwitch } from "./AutopilotSwitch";
 
 type DreamXProjectId = Id<"dreamXProjects">;
 
@@ -32,6 +34,7 @@ function InnerDreamXCanvas({
   const dxApi = api as any;
 
   const project = useQuery(dxApi.dreamXCanvas.getProject, { id: projectId });
+  const { balance, nodeCosts, autopilotEnabled, setAutopilotEnabled } = useCredits();
 
   const completeMediaUpload   = useMutation(dxApi.dreamXCanvas.completeMediaUpload);
   const completeMemeRecall    = useMutation(dxApi.dreamXCanvas.completeMemeRecall);
@@ -39,6 +42,7 @@ function InnerDreamXCanvas({
   const completeStoryboard    = useMutation(dxApi.dreamXCanvas.completeStoryboard);
   const completeTTSSelection  = useMutation(dxApi.dreamXCanvas.completeTTSSelection);
   const resetFromNode         = useMutation(dxApi.dreamXCanvas.resetFromNode);
+  const deductCredits         = useMutation(dxApi.credits.deductCredits);
   const updateNodeState       = useMutation(dxApi.dreamXCanvas.updateNodeState);
   const generateUploadUrl     = useMutation(dxApi.dreamXCanvas.generateUploadUrl);
   const addUserMedia          = useMutation(dxApi.dreamXMedia.addUserMedia);
@@ -74,22 +78,34 @@ function InnerDreamXCanvas({
   useEffect(() => {
     const ns = project?.nodeStates as any;
     if (!ns) return;
-    if (ns.capcutBuild?.status === "completed" && document.hidden) {
-      try {
-        new Notification("DreamX 成片完成！", {
-          body: "CapCut 工程文件已生成，可以下载了。",
-          icon: "/favicon.ico",
-        });
-      } catch {}
+    if (ns.capcutBuild?.status === "completed") {
+      if (document.hidden) {
+        try {
+          new Notification("DreamX 成片完成！", {
+            body: "CapCut 工程文件已生成，可以下载了。",
+            icon: "/favicon.ico",
+          });
+        } catch {}
+      }
+      if (autopilotEnabled) {
+        setAutopilotEnabled(false);
+        toast.success("AI 托管已完成整个流程，已自动关闭");
+      }
     }
   }, [(project?.nodeStates as any)?.capcutBuild?.status]);
 
-  // 分镜节点：idle 时自动触发生成
+  // 分镜节点：idle 时自动触发生成（带积分余额预检）
   const storyboardAutoTriggeredRef = useRef(false);
   useEffect(() => {
     const ns = project?.nodeStates as any;
     if (!ns) return;
-    if (ns.storyboard?.status === "idle" && !storyboardAutoTriggeredRef.current) {
+    if (ns.storyboard?.status === "idle" && !storyboardAutoTriggeredRef.current && !autopilotEnabled) {
+      // 余额预检：积分不足时不自动触发，提示用户
+      const storyboardCost = nodeCosts["storyboard"] ?? 3;
+      if (balance !== undefined && balance < storyboardCost) {
+        toast.error(`积分不足（需要 ${storyboardCost} 积分），无法自动生成分镜，请前往兑换码页面充值`);
+        return;
+      }
       storyboardAutoTriggeredRef.current = true;
       // 自动触发 generateStoryboard
       const images = ns.mediaUpload?.images?.map((i: any) => ({ url: i.url, fileName: i.fileName })) ?? [];
@@ -104,7 +120,7 @@ function InnerDreamXCanvas({
     if (ns.storyboard?.status !== "idle" && ns.storyboard?.status !== "generating") {
       storyboardAutoTriggeredRef.current = false;
     }
-  }, [(project?.nodeStates as any)?.storyboard?.status]);
+  }, [(project?.nodeStates as any)?.storyboard?.status, balance]);
 
   const [analysisStatus, setAnalysisStatus] = useState<"idle" | "generating" | "ready" | "error">("idle");
   const [analysisProgress, setAnalysisProgress] = useState<{ stage: string; percent: number }>({ stage: "", percent: 0 });
@@ -169,8 +185,16 @@ function InnerDreamXCanvas({
 
       const onReset = async () => {
         try {
+          if (nodeKey === "storyboard") {
+            const imageCount = (ns.mediaUpload?.images?.length ?? 0) as number;
+            await deductCredits({
+              nodeType: "storyboard",
+              imageCount,
+              projectId,
+              description: "重置分镜脚本",
+            });
+          }
           await resetFromNode({ id: projectId, fromNodeKey: nodeKey as any });
-          // 重置后允许分镜重新自动触发
           storyboardAutoTriggeredRef.current = false;
           toast.success(`已重置到「${PIPELINE_CONFIG.find((c) => c.key === nodeKey)?.label}」节点`);
         } catch (e) {
@@ -208,7 +232,7 @@ function InnerDreamXCanvas({
             setAnalysisProgress({ stage: "正在分析素材内容...", percent: 30 });
             // 触发分析
             try {
-              const analysis = await analyzeMediaBatch({ imageUrls: allImages.map((i) => i.url), eventDescription: description || undefined });
+              const analysis = await analyzeMediaBatch({ imageUrls: allImages.map((i) => i.url), eventDescription: description || undefined, projectId });
               setAnalysisProgress({ stage: "分析完成", percent: 100 });
               setAnalysisStatus("ready");
               // 保存分析结果（不 complete，等用户确认）
@@ -220,9 +244,10 @@ function InnerDreamXCanvas({
                 status: "idle",
               }});
               toast.success("分析完成！请确认分析结果后继续");
-            } catch {
+            } catch (e) {
               setAnalysisStatus("error");
               await updateNodeState({ id: projectId, nodeKey: "mediaUpload", patch: { images: allImages, eventDescription: description, status: "idle" } });
+              toast.error(`AI 分析失败：${toUserMessage(e)}`);
             }
           } catch (e) {
             toast.error(`上传失败：${toUserMessage(e)}`);
@@ -236,7 +261,7 @@ function InnerDreamXCanvas({
           setAnalysisProgress({ stage: "正在重新分析素材内容...", percent: 30 });
           await updateNodeState({ id: projectId, nodeKey: "mediaUpload", patch: { status: "generating" } });
           try {
-            const analysis = await analyzeMediaBatch({ imageUrls: images.map((i: any) => i.url), eventDescription: ns.mediaUpload?.eventDescription || undefined });
+            const analysis = await analyzeMediaBatch({ imageUrls: images.map((i: any) => i.url), eventDescription: ns.mediaUpload?.eventDescription || undefined, projectId });
             setAnalysisProgress({ stage: "分析完成", percent: 100 });
             setAnalysisStatus("ready");
             await updateNodeState({ id: projectId, nodeKey: "mediaUpload", patch: {
@@ -245,9 +270,10 @@ function InnerDreamXCanvas({
               status: "idle",
             }});
             toast.success("重新分析完成！");
-          } catch {
+          } catch (e) {
             setAnalysisStatus("error");
             await updateNodeState({ id: projectId, nodeKey: "mediaUpload", patch: { status: "idle" } });
+            toast.error(`重新分析失败：${toUserMessage(e)}`);
           }
         };
 
@@ -330,7 +356,7 @@ function InnerDreamXCanvas({
           onConfirmSelection: handleConfirmMemeSelection,
           onUploadMeme: handleUploadMeme,
           onReRecall: handleReRecallMemes,
-          onSuggestInsertions: suggestMemeInsertions,
+          onSuggestInsertions: (args: any) => suggestMemeInsertions({ ...args, projectId }),
         };
       }
 
@@ -461,7 +487,7 @@ function InnerDreamXCanvas({
             // 对比当前字幕文本快照与上次生成 TTS 时保存的快照
             const currentSnapshot = computeSubtitleSnapshot(timeline);
             const lastSnapshot = ns.ttsSelection?.subtitleSnapshot as string | undefined;
-            const subtitlesChanged = !lastSnapshot || lastSnapshot !== currentSnapshot;
+            const subtitlesChanged = !!lastSnapshot && lastSnapshot !== currentSnapshot;
 
             await updateNodeState({ id: projectId, nodeKey: "ttsSelection", patch: { status: "generating" } });
 
@@ -481,7 +507,13 @@ function InnerDreamXCanvas({
               itemIdx: s.itemIdx * 100000 + s.subIdx,
               text: s.text,
             }));
-            const result = await generateTTSPerSegment({ projectId, voiceType, segments: segmentsForAPI });
+            const result = await generateTTSPerSegment({
+              projectId,
+              voiceType,
+              segments: segmentsForAPI,
+              subtitlesChanged,
+              imageCount: ns.mediaUpload?.images?.length ?? 0,
+            });
             const voice = ns.ttsSelection?.recommendedVoices?.find((v: any) => v.voiceType === voiceType);
             await completeTTSSelection({
               id: projectId,
@@ -515,10 +547,10 @@ function InnerDreamXCanvas({
           }
         };
 
-        // 重新召回：清空已推荐的配音列表，让节点重新触发声音匹配
+        // 重新召回：重置状态为 idle，让节点重新触发声音匹配
         const handleReRecallTTS = async () => {
           try {
-            await updateNodeState({ id: projectId, nodeKey: "ttsSelection", patch: { recommendedVoices: [] } });
+            await updateNodeState({ id: projectId, nodeKey: "ttsSelection", patch: { status: "idle", recommendedVoices: [] } });
           } catch (e) {
             toast.error(`重新召回失败：${toUserMessage(e)}`);
           }
@@ -759,6 +791,7 @@ interface DreamXCanvasProps {
 export default function DreamXCanvas({ projectId }: DreamXCanvasProps) {
   const dxApi = api as any;
   const project = useQuery(dxApi.dreamXCanvas.getProject, { id: projectId as DreamXProjectId });
+  const hasMedia = ((project?.nodeStates as any)?.mediaUpload?.images?.length ?? 0) > 0;
 
   const [rfLoaded, setRfLoaded] = useState(false);
   const [rfComponents, setRfComponents] = useState<Record<string, any> | null>(null);
@@ -782,50 +815,53 @@ export default function DreamXCanvas({ projectId }: DreamXCanvasProps) {
   }, []);
 
   return (
-    <div className="flex h-screen flex-col bg-background">
-      <div className="flex h-14 shrink-0 items-center justify-between border-b border-border/50 px-4">
-        <div className="flex items-center gap-3">
-          <Link to="/dashboard">
-            <Button variant="ghost" size="sm" className="gap-1.5">
-              <ArrowLeft className="h-4 w-4" />
-              返回
-            </Button>
-          </Link>
-          <div className="h-5 w-px bg-border/50" />
-          <div className="flex items-center gap-2">
-            <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-gradient-to-br from-rose-500 to-red-600">
-              <Film className="h-4 w-4 text-white" />
+    <CreditsProvider projectId={projectId}>
+      <div className="flex h-screen flex-col bg-background">
+        <div className="flex h-14 shrink-0 items-center justify-between border-b border-border/50 px-4">
+          <div className="flex items-center gap-3">
+            <Link to="/dashboard">
+              <Button variant="ghost" size="sm" className="gap-1.5">
+                <ArrowLeft className="h-4 w-4" />
+                返回
+              </Button>
+            </Link>
+            <div className="h-5 w-px bg-border/50" />
+            <div className="flex items-center gap-2">
+              <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-gradient-to-br from-rose-500 to-red-600">
+                <Film className="h-4 w-4 text-white" />
+              </div>
+              <div>
+                <h1 className="text-sm font-semibold leading-tight">{project?.title ?? "DreamX 工作流"}</h1>
+                <p className="text-xs text-muted-foreground leading-tight">CapCut 工程生成流水线</p>
+              </div>
             </div>
-            <div>
-              <h1 className="text-sm font-semibold leading-tight">{project?.title ?? "DreamX 工作流"}</h1>
-              <p className="text-xs text-muted-foreground leading-tight">CapCut 工程生成流水线</p>
-            </div>
+          </div>
+          <AutopilotSwitch hasMedia={hasMedia} />
+        </div>
+        <div className="flex flex-1 overflow-hidden">
+          <div className="flex-1 overflow-hidden">
+            {rfLoaded && rfComponents ? (
+              <InnerDreamXCanvas
+                projectId={projectId as DreamXProjectId}
+                ReactFlow={rfComponents.ReactFlow}
+                ReactFlowProvider={rfComponents.ReactFlowProvider}
+                Background={rfComponents.Background}
+                Controls={rfComponents.Controls}
+                useNodesState={rfComponents.useNodesState}
+                useEdgesState={rfComponents.useEdgesState}
+                useReactFlow={rfComponents.useReactFlow}
+              />
+            ) : (
+              <div className="flex h-full items-center justify-center">
+                <div className="flex items-center gap-2 text-muted-foreground">
+                  <div className="h-4 w-4 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+                  初始化画布中…
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </div>
-      <div className="flex flex-1 overflow-hidden">
-        <div className="flex-1 overflow-hidden">
-          {rfLoaded && rfComponents ? (
-            <InnerDreamXCanvas
-              projectId={projectId as DreamXProjectId}
-              ReactFlow={rfComponents.ReactFlow}
-              ReactFlowProvider={rfComponents.ReactFlowProvider}
-              Background={rfComponents.Background}
-              Controls={rfComponents.Controls}
-              useNodesState={rfComponents.useNodesState}
-              useEdgesState={rfComponents.useEdgesState}
-              useReactFlow={rfComponents.useReactFlow}
-            />
-          ) : (
-            <div className="flex h-full items-center justify-center">
-              <div className="flex items-center gap-2 text-muted-foreground">
-                <div className="h-4 w-4 animate-spin rounded-full border-2 border-primary border-t-transparent" />
-                初始化画布中…
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
-    </div>
+    </CreditsProvider>
   );
 }

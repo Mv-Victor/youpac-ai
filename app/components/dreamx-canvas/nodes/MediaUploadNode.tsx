@@ -3,6 +3,7 @@ import {
   Upload, Sparkles, Loader2, RefreshCw, Plus, X, MessageSquare,
   Eye, ZoomIn, CheckCircle2, Edit2, Tag,
 } from "lucide-react";
+import { toast } from "sonner";
 import { Button } from "~/components/ui/button";
 import { Textarea } from "~/components/ui/textarea";
 import {
@@ -10,9 +11,12 @@ import {
   DialogDescription, DialogFooter,
 } from "~/components/ui/dialog";
 import { Badge } from "~/components/ui/badge";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "~/components/ui/tooltip";
 import { cn } from "~/lib/utils";
 import { DXNodeBase } from "../DXNodeBase";
 import type { DXNodeData } from "./pipeline.config";
+import { CreditsBadge } from "~/components/credits/CreditsBadge";
+import { useCredits } from "~/contexts/CreditsContext";
 
 const ALLOWED_IMAGE_TYPES = new Set([
   "image/jpeg", "image/png", "image/gif",
@@ -57,6 +61,13 @@ const DXMediaUploadModal = memo(({
   const [previewUrls, setPreviewUrls] = useState<string[]>([]);
   const [description, setDescription] = useState(initialDescription);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const { balance, nodeCosts } = useCredits();
+
+  const uploadImageCount = initialImages.length + selectedImages.length;
+  const uploadBaseCost = nodeCosts["mediaUpload"] ?? 2;
+  const uploadImageBonus = uploadImageCount > 4 ? Math.ceil((uploadImageCount - 4) / 2) : 0;
+  const uploadTotalCost = uploadBaseCost + uploadImageBonus;
+  const uploadInsufficient = balance !== undefined && balance < uploadTotalCost;
 
   useEffect(() => () => {
     previewUrls.forEach((u) => URL.revokeObjectURL(u));
@@ -200,11 +211,11 @@ const DXMediaUploadModal = memo(({
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={handleClose} disabled={isUploading}>取消</Button>
-          <Button onClick={handleSubmit} disabled={totalImages === 0 || isUploading}>
+          <Button onClick={handleSubmit} disabled={totalImages === 0 || isUploading || uploadInsufficient}>
             {isUploading ? (
               <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> 上传中…</>
             ) : (
-              `上传图片（${totalImages}）`
+              <>上传图片（{totalImages}）<CreditsBadge nodeType="mediaUpload" imageCount={uploadImageCount} /></>
             )}
           </Button>
         </DialogFooter>
@@ -277,22 +288,52 @@ const MediaUploadNode = memo(({ data }: MediaUploadNodeInnerProps) => {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [previewIdx, setPreviewIdx] = useState<number | null>(null);
   const [isUploading, setIsUploading] = useState(false);
+  const { balance, nodeCosts, autopilotEnabled, setAutopilotEnabled } = useCredits();
 
-  // 分析结果编辑态
   const [isEditingAnalysis, setIsEditingAnalysis] = useState(false);
   const [editedAnalysis, setEditedAnalysis] = useState(data.aiAnalysis ?? "");
   const [editedTags, setEditedTags] = useState<string[]>(data.emotionTags ?? []);
 
-  // 当 aiAnalysis / emotionTags 从数据库更新时，同步本地编辑态
   useEffect(() => {
     setEditedAnalysis(data.aiAnalysis ?? "");
     setEditedTags(data.emotionTags ?? []);
   }, [data.aiAnalysis, data.emotionTags]);
 
+  const autopilotConfirmedRef = useRef(false);
   const hasImages = (data.images?.length ?? 0) > 0;
   const isCompleted = data.isReadOnly;
   const aStatus = data.analysisStatus ?? "idle";
   const aProgress = data.analysisProgress;
+
+  useEffect(() => {
+    if (!autopilotEnabled) { autopilotConfirmedRef.current = false; return; }
+    if (isCompleted) return;
+    if (autopilotConfirmedRef.current) return;
+    if (!hasImages) return;
+    if (aStatus === "generating") return;
+    // 分析失败后，autopilot 关闭，避免无限重试
+    if (aStatus === "error") {
+      setAutopilotEnabled(false, "素材分析失败，请检查图片大小或手动重试");
+      return;
+    }
+    if (data.aiAnalysis && data.onConfirmAnalysis) {
+      autopilotConfirmedRef.current = true;
+      try {
+        data.onConfirmAnalysis(data.aiAnalysis, data.emotionTags ?? []);
+      } catch (e: any) {
+        setAutopilotEnabled(false, e?.message ?? "素材分析自动确认失败");
+      }
+    }
+  }, [autopilotEnabled, data.aiAnalysis, data.analysisStatus, aStatus, isCompleted, hasImages, data.onConfirmAnalysis, data.emotionTags, setAutopilotEnabled]);
+
+  const imageCount = data.images?.length ?? 0;
+  const baseCost = nodeCosts["mediaUpload"] ?? 2;
+  const imageBonus = imageCount > 4 ? Math.ceil((imageCount - 4) / 2) : 0;
+  const totalCost = baseCost + imageBonus;
+  const insufficientCredits = balance !== undefined && balance < totalCost;
+
+  const memeInsertCost = nodeCosts["memeInsert"] ?? 2;
+  const confirmInsufficient = balance !== undefined && balance < memeInsertCost;
 
   const handleUpload = useCallback(async (
     imageFiles: File[],
@@ -314,6 +355,10 @@ const MediaUploadNode = memo(({ data }: MediaUploadNodeInnerProps) => {
   };
 
   const handleConfirmAnalysis = () => {
+    if (editedAnalysis.length > 400) {
+      toast.error(`分析内容不能超过400字（当前 ${editedAnalysis.length} 字），请编辑后再确认`);
+      return;
+    }
     data.onConfirmAnalysis?.(editedAnalysis, editedTags);
     setIsEditingAnalysis(false);
   };
@@ -447,9 +492,11 @@ const MediaUploadNode = memo(({ data }: MediaUploadNodeInnerProps) => {
                           size="sm"
                           className="flex-1 text-xs h-7 bg-primary"
                           onClick={handleConfirmAnalysis}
+                          disabled={confirmInsufficient}
                         >
                           <CheckCircle2 className="h-3 w-3 mr-1" />
                           确认并继续
+                          <CreditsBadge nodeType="memeInsert" />
                         </Button>
                       </div>
                     </>
@@ -479,19 +526,22 @@ const MediaUploadNode = memo(({ data }: MediaUploadNodeInnerProps) => {
                             size="sm"
                             className="flex-1 text-xs h-7 px-1.5"
                             onClick={handleConfirmAnalysis}
+                            disabled={confirmInsufficient}
                           >
                             <CheckCircle2 className="h-3 w-3 mr-1 shrink-0" />
                             确认
+                            <CreditsBadge nodeType="memeInsert" />
                           </Button>
                           <Button
                             size="sm"
                             variant="outline"
                             className="flex-1 text-xs h-7 px-1.5"
                             onClick={data.onGenerateAnalysis}
-                            disabled={aStatus === "generating" || !data.onGenerateAnalysis}
+                            disabled={aStatus === "generating" || !data.onGenerateAnalysis || insufficientCredits}
                           >
                             <RefreshCw className="h-3 w-3 mr-1 shrink-0" />
                             重生成
+                            <CreditsBadge nodeType="mediaUpload" imageCount={imageCount} />
                           </Button>
                         </div>
                       )}
@@ -511,18 +561,29 @@ const MediaUploadNode = memo(({ data }: MediaUploadNodeInnerProps) => {
             {/* 操作按钮：仅在无分析结果时显示（有结果时三按钮已内联在分析结果区） */}
             {!isCompleted && !(aStatus === "ready" && editedAnalysis) && (
               <div className="flex items-center gap-2">
-                <Button
-                  size="sm"
-                  className="flex-1"
-                  onClick={data.onGenerateAnalysis}
-                  disabled={aStatus === "generating" || !data.onGenerateAnalysis}
-                >
-                  {aStatus === "generating" ? (
-                    <><Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />分析中...</>
-                  ) : (
-                    <><Sparkles className="h-3.5 w-3.5 mr-1.5" />分析素材</>
-                  )}
-                </Button>
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <span className="flex-1">
+                        <Button
+                          size="sm"
+                          className="w-full"
+                          onClick={data.onGenerateAnalysis}
+                          disabled={aStatus === "generating" || !data.onGenerateAnalysis || insufficientCredits}
+                        >
+                          {aStatus === "generating" ? (
+                            <><Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />分析中...</>
+                          ) : (
+                            <><Sparkles className="h-3.5 w-3.5 mr-1.5" />分析素材<CreditsBadge nodeType="mediaUpload" imageCount={imageCount} /></>
+                          )}
+                        </Button>
+                      </span>
+                    </TooltipTrigger>
+                    {insufficientCredits && (
+                      <TooltipContent>积分不足，请前往兑换码页面</TooltipContent>
+                    )}
+                  </Tooltip>
+                </TooltipProvider>
               </div>
             )}
           </div>

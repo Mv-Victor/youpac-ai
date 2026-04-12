@@ -3,8 +3,37 @@ import { Mic, Loader2, Volume2, CheckCircle2, Play, Pause, Pencil, Check, X, Ref
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
 import { cn } from "~/lib/utils";
+import { useCredits } from "~/contexts/CreditsContext";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "~/components/ui/tooltip";
 import { DXNodeBase } from "../DXNodeBase";
 import type { DXNodeData } from "./pipeline.config";
+
+function TotalCreditsBadge({ cost, breakdown }: { cost: number; breakdown?: { tts: number; storyboard: number } }) {
+  return (
+    <TooltipProvider>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <span className="inline-flex items-center text-xs font-medium text-amber-500 bg-amber-500/10 border border-amber-500/20 rounded px-1.5 py-0.5 ml-1 cursor-default select-none">
+            {cost} 积分
+          </span>
+        </TooltipTrigger>
+        <TooltipContent>
+          <div className="text-xs space-y-0.5">
+            {breakdown ? (
+              <>
+                <div>配音积分：{breakdown.tts}</div>
+                <div>字幕变更分镜积分：{breakdown.storyboard}</div>
+                <div className="font-semibold">合计：{cost} 积分</div>
+              </>
+            ) : (
+              <div>{cost} 积分</div>
+            )}
+          </div>
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  );
+}
 
 interface Voice {
   id: string;
@@ -84,6 +113,23 @@ const TTSSelectionNode = memo(({ data }: TTSSelectionNodeInnerProps) => {
   const [recommended, setRecommended] = useState<Voice[]>([]);
   const [selectedVoiceType, setSelectedVoiceType] = useState(data.selectedVoiceType ?? "");
   const [isGeneratingTTS, setIsGeneratingTTS] = useState(false);
+  const { balance, nodeCosts, autopilotEnabled } = useCredits();
+  const baseCost = nodeCosts["ttsSelection"] ?? 3;
+  const segments = data.segments ?? [];
+  const totalChars = segments.reduce((sum, s) => sum + (s.text?.length ?? 0), 0);
+  const charBonus = totalChars > 50 ? Math.ceil((totalChars - 50) / 20) : 0;
+  const ttsTotalCost = baseCost + charBonus;
+
+  const imageCount = (data.allNodeStates as any)?.mediaUpload?.images?.length ?? 0;
+  const lastSnapshot = (data.nodeState as any)?.subtitleSnapshot as string | undefined;
+  const currentSnapshot = segments.map((s) => `${s.tiIdx}_${s.subIdx}:${s.text.trim()}`).join("|");
+  const subtitlesChanged = !!lastSnapshot && lastSnapshot !== currentSnapshot;
+  const storyboardBaseCost = nodeCosts["storyboard"] ?? 3;
+  const storyboardBonus = imageCount > 4 ? Math.ceil((imageCount - 4) / 2) : 0;
+  const extraCost = subtitlesChanged ? storyboardBaseCost + storyboardBonus : 0;
+  const totalTTSCost = ttsTotalCost + extraCost;
+
+  const insufficientCredits = balance !== undefined && balance < totalTTSCost;
 
   // 试听播放状态
   const [playingUrl, setPlayingUrl] = useState<string | null>(null);
@@ -126,6 +172,11 @@ const TTSSelectionNode = memo(({ data }: TTSSelectionNodeInnerProps) => {
       clearInterval(progressTimerRef.current);
     };
   }, []);
+
+  const autopilotCalledRef = useRef(false);
+  useEffect(() => {
+    if (!autopilotEnabled) { autopilotCalledRef.current = false; return; }
+  }, [autopilotEnabled, status, selectedVoiceType]);
 
   const togglePlay = useCallback((url: string) => {
     if (playingUrl === url) {
@@ -203,7 +254,7 @@ const TTSSelectionNode = memo(({ data }: TTSSelectionNodeInnerProps) => {
   };
 
   // 各片段字幕文本（带序号）
-  const segments = data.segments ?? [];
+  // segments 已在上方计算，此处直接使用
 
   // ─── 已完成态 ───────────────────────────────────────────────────────────────
   if (isCompleted) {
@@ -258,6 +309,8 @@ const TTSSelectionNode = memo(({ data }: TTSSelectionNodeInnerProps) => {
       nodeNum={5}
       isReadOnly={isCompleted}
       onReset={data.onReset}
+      resetNodeType={undefined}
+      resetImageCount={0}
     >
       {status === "error" && (
         <div className="space-y-2">
@@ -433,14 +486,14 @@ const TTSSelectionNode = memo(({ data }: TTSSelectionNodeInnerProps) => {
           </Button>
           <Button
             onClick={handleGenerate}
-            disabled={!selectedVoiceType || isGeneratingTTS || isGenerating || data.isReadOnly || segments.length === 0}
+            disabled={!selectedVoiceType || isGeneratingTTS || isGenerating || data.isReadOnly || segments.length === 0 || insufficientCredits}
             className="flex-1 bg-gradient-to-r from-emerald-500 to-green-600 hover:from-emerald-600 hover:to-green-700"
             size="sm"
           >
             {isGeneratingTTS || isGenerating ? (
               <><Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />生成中...</>
             ) : (
-              <><Mic className="mr-1.5 h-3.5 w-3.5" />生成配音</>
+              <><Mic className="mr-1.5 h-3.5 w-3.5" />生成配音<TotalCreditsBadge cost={totalTTSCost} breakdown={subtitlesChanged && segments.length > 0 ? { tts: ttsTotalCost, storyboard: extraCost } : undefined} /></>
             )}
           </Button>
         </div>
