@@ -4,6 +4,101 @@ import { internal as _internal } from "./_generated/api";
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const internal: any = _internal;
 
+// ─── New autopilot rewrite (003-ai-hosting-rewrite) ──────────────────────────
+
+export const enableAutopilot = mutation({
+  args: {
+    projectId: v.id("dreamXProjects"),
+  },
+  handler: async (ctx, args) => {
+    // 1. Auth check
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Unauthorized");
+
+    const project = await ctx.db.get(args.projectId);
+    if (!project || project.userId !== identity.subject) throw new Error("Unauthorized");
+
+    // 2. Idempotent: if already running, ignore
+    if (project.autopilotEnabled === true) return;
+
+    // 3. Validate images non-empty
+    const images = project.nodeStates?.mediaUpload?.images ?? [];
+    if (images.length === 0) throw new Error("请先上传图片");
+
+    // 4. Clean up any existing orphaned AutopilotJob for this project
+    const existingJobs = await ctx.db
+      .query("autopilotJobs")
+      .withIndex("by_project", (q) => q.eq("projectId", args.projectId))
+      .collect();
+
+    for (const job of existingJobs) {
+      if (job.pendingScheduledJobId) {
+        try {
+          await ctx.scheduler.cancel(job.pendingScheduledJobId);
+        } catch {
+          // Job may have already run or been cancelled, ignore
+        }
+      }
+      await ctx.db.delete(job._id);
+    }
+
+    // 5. Write project: autopilotEnabled=true, autopilotFailed=false
+    await ctx.db.patch(args.projectId, {
+      autopilotEnabled: true,
+      autopilotFailed: false,
+      updatedAt: Date.now(),
+    });
+
+    // 6. Find startIndex: first node with status !== "completed"
+    const PIPELINE = [
+      "mediaUpload",
+      "memeRecall",
+      "bgmRecall",
+      "storyboard",
+      "ttsSelection",
+      "capcutBuild",
+    ] as const;
+
+    let startIndex = 0;
+    for (let i = 0; i < PIPELINE.length; i++) {
+      const nodeKey = PIPELINE[i];
+      const nodeStatus = (project.nodeStates as any)[nodeKey]?.status;
+      if (nodeStatus !== "completed") {
+        startIndex = i;
+        break;
+      }
+      // If all are completed, startIndex stays at last
+      if (i === PIPELINE.length - 1) startIndex = i;
+    }
+
+    // 7. Create new AutopilotJob
+    const now = Date.now();
+    const jobId = await ctx.db.insert("autopilotJobs", {
+      projectId: args.projectId,
+      currentNodeIndex: startIndex,
+      retryCount: 0,
+      pendingScheduledJobId: undefined,
+      confirmedNodeIndices: [],
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    // 8. Schedule runAutopilotStep after 1000ms and write pendingScheduledJobId
+    const scheduledId = await ctx.scheduler.runAfter(
+      1000,
+      internal.autopilotActions.runAutopilotStep,
+      { projectId: args.projectId, jobId }
+    );
+
+    await ctx.db.patch(jobId, {
+      pendingScheduledJobId: scheduledId,
+      updatedAt: Date.now(),
+    });
+  },
+});
+
+// ─── Legacy autopilot (to be replaced in T003-T009) ──────────────────────────
+
 export const setAutopilot = mutation({
   args: {
     projectId: v.id("dreamXProjects"),
