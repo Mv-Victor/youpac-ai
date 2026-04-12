@@ -11,9 +11,12 @@
 import type * as agents from "../agents.js";
 import type * as ai from "../ai.js";
 import type * as aiHackathon from "../aiHackathon.js";
+import type * as autopilot from "../autopilot.js";
+import type * as autopilotActions from "../autopilotActions.js";
 import type * as canvas from "../canvas.js";
 import type * as capcutBuilder from "../capcutBuilder.js";
 import type * as chat from "../chat.js";
+import type * as credits from "../credits.js";
 import type * as debug from "../debug.js";
 import type * as dreamXAI from "../dreamXAI.js";
 import type * as dreamXCanvas from "../dreamXCanvas.js";
@@ -57,9 +60,12 @@ declare const fullApi: ApiFromModules<{
   agents: typeof agents;
   ai: typeof ai;
   aiHackathon: typeof aiHackathon;
+  autopilot: typeof autopilot;
+  autopilotActions: typeof autopilotActions;
   canvas: typeof canvas;
   capcutBuilder: typeof capcutBuilder;
   chat: typeof chat;
+  credits: typeof credits;
   debug: typeof debug;
   dreamXAI: typeof dreamXAI;
   dreamXCanvas: typeof dreamXCanvas;
