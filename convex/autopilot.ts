@@ -97,6 +97,24 @@ export const enableAutopilot = mutation({
   },
 });
 
+export const getProjectAutopilotStatus = query({
+  args: {
+    projectId: v.id("dreamXProjects"),
+  },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) return null;
+
+    const project = await ctx.db.get(args.projectId);
+    if (!project || project.userId !== identity.subject) return null;
+
+    return {
+      enabled: project.autopilotEnabled === true,
+      failed: project.autopilotFailed === true,
+    };
+  },
+});
+
 export const disableAutopilot = mutation({
   args: {
     projectId: v.id("dreamXProjects"),
