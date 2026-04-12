@@ -1,5 +1,5 @@
 import { v } from "convex/values";
-import { mutation, query, internalMutation } from "./_generated/server";
+import { mutation, query, internalMutation, internalQuery } from "./_generated/server";
 import { internal as _internal } from "./_generated/api";
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const internal: any = _internal;
@@ -334,6 +334,13 @@ export const _scheduleNextStep = internalMutation({
       pendingScheduledJobId: scheduledId,
       updatedAt: Date.now(),
     });
+  },
+});
+
+export const _getJob = internalQuery({
+  args: { jobId: v.id("autopilotJobs") },
+  handler: async (ctx, args) => {
+    return await ctx.db.get(args.jobId);
   },
 });
 

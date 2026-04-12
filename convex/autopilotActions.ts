@@ -58,74 +58,188 @@ function selectVoiceByEmotion(emotionTags: string[]): { voiceType: string; voice
 }
 
 export const runAutopilotStep = internalAction({
-  args: { projectId: v.id("dreamXProjects") },
+  args: {
+    projectId: v.id("dreamXProjects"),
+    jobId: v.id("autopilotJobs"),
+  },
   handler: async (ctx, args) => {
-    const { projectId } = args;
+    const { projectId, jobId } = args;
 
+    // 1. Read project and job
     const project = await ctx.runQuery(api.dreamXCanvas.getProject, { id: projectId });
     if (!project) return;
     if (!(project as any).autopilotEnabled) return;
 
+    // Fetch the autopilot job via a dedicated internal query
+    const job = await ctx.runQuery(internal.autopilot._getJob, { jobId });
+    if (!job) return;
+
+    // 2. Clear pendingScheduledJobId — prevent double-cancel
+    await ctx.runMutation(internal.autopilot._updateJob, {
+      jobId,
+      patch: { pendingScheduledJobId: null },
+    });
+
     const ns = (project as any).nodeStates;
 
+    // 3. Find the first non-completed node
+    let currentNodeIndex: number | null = null;
     let currentNode: PipelineKey | null = null;
-    for (const key of PIPELINE) {
+    for (let i = 0; i < PIPELINE.length; i++) {
+      const key = PIPELINE[i];
       const nodeStatus = ns[key]?.status;
       if (nodeStatus !== "completed") {
+        currentNodeIndex = i;
         currentNode = key;
         break;
       }
     }
 
-    if (!currentNode) {
+    // 4. All nodes completed → stop autopilot (success)
+    if (currentNode === null || currentNodeIndex === null) {
       await ctx.runMutation(internal.autopilot._stopAutopilot, { projectId });
       return;
     }
 
     const nodeStatus = ns[currentNode]?.status;
 
+    // 5. Current node in error → mark failed
     if (nodeStatus === "error") {
-      await ctx.runMutation(internal.autopilot._stopAutopilot, { projectId });
+      await ctx.runMutation(internal.autopilot._markFailed, {
+        projectId,
+        reason: `Node ${currentNode} encountered an error`,
+      });
       return;
     }
 
+    // 6. Retry count exceeded → mark failed (timeout)
+    if (job.retryCount >= 30) {
+      await ctx.runMutation(internal.autopilot._markFailed, {
+        projectId,
+        reason: `Timeout waiting for node ${currentNode} after 30 retries`,
+      });
+      return;
+    }
+
+    // 7. Node still generating → increment retryCount and schedule 10s retry
     if (nodeStatus === "generating") {
-      await ctx.runMutation(internal.autopilot._scheduleNextStep, { projectId, delayMs: 15000 });
+      await ctx.runMutation(internal.autopilot._updateJob, {
+        jobId,
+        patch: { retryCount: job.retryCount + 1 },
+      });
+      await ctx.runMutation(internal.autopilot._scheduleNextStep, {
+        projectId,
+        jobId,
+        delayMs: 10000,
+      });
       return;
     }
 
-    if (currentNode === "mediaUpload") {
-      await ctx.runMutation(internal.autopilot._scheduleNextStep, { projectId, delayMs: 20000 });
-      return;
-    }
+    // 8. Node is idle
+    if (nodeStatus === "idle") {
+      const confirmedNodeIndices: number[] = job.confirmedNodeIndices ?? [];
 
-    try {
-      if (currentNode === "memeRecall" && nodeStatus === "idle") {
-        await handleMemeRecall(ctx, projectId, ns);
-      } else if (currentNode === "bgmRecall" && nodeStatus === "idle") {
-        await handleBgmRecall(ctx, projectId, ns);
-      } else if (currentNode === "storyboard" && nodeStatus === "idle") {
-        await handleStoryboard(ctx, projectId, ns);
-      } else if (currentNode === "ttsSelection" && nodeStatus === "idle") {
-        await handleTTSSelection(ctx, projectId, ns);
-      } else if (currentNode === "capcutBuild" && nodeStatus === "idle") {
-        await handleCapcutBuild(ctx, projectId);
+      // Check if this node index is already confirmed (idempotency guard)
+      if (confirmedNodeIndices.includes(currentNodeIndex)) {
+        // Skip and advance to the next node index
+        await ctx.runMutation(internal.autopilot._updateJob, {
+          jobId,
+          patch: { currentNodeIndex: currentNodeIndex + 1, retryCount: 0 },
+        });
+        // Schedule next step immediately
+        await ctx.runMutation(internal.autopilot._scheduleNextStep, {
+          projectId,
+          jobId,
+          delayMs: 3000,
+        });
+        return;
       }
-    } catch (e: any) {
-      console.error(`[Autopilot] Error in node ${currentNode}:`, e?.message ?? e);
-      await ctx.runMutation(internal.autopilot._stopAutopilot, { projectId });
-      return;
+
+      // Execute the handler for this node
+      try {
+        if (currentNode === "mediaUpload") {
+          await handleMediaUpload(ctx, projectId, jobId, ns, currentNodeIndex, confirmedNodeIndices);
+        } else if (currentNode === "memeRecall") {
+          await handleMemeRecall(ctx, projectId, jobId, ns, currentNodeIndex, confirmedNodeIndices);
+        } else if (currentNode === "bgmRecall") {
+          await handleBgmRecall(ctx, projectId, jobId, ns, currentNodeIndex, confirmedNodeIndices);
+        } else if (currentNode === "storyboard") {
+          await handleStoryboard(ctx, projectId, jobId, ns, currentNodeIndex, confirmedNodeIndices);
+        } else if (currentNode === "ttsSelection") {
+          await handleTtsSelection(ctx, projectId, jobId, ns, currentNodeIndex, confirmedNodeIndices);
+        } else if (currentNode === "capcutBuild") {
+          await handleCapcutBuild(ctx, projectId, jobId, currentNodeIndex, confirmedNodeIndices);
+        }
+      } catch (e: any) {
+        console.error(`[Autopilot] Error in handler for node ${currentNode}:`, e?.message ?? e);
+        await ctx.runMutation(internal.autopilot._markFailed, {
+          projectId,
+          reason: `Handler error in node ${currentNode}: ${e?.message ?? String(e)}`,
+        });
+        return;
+      }
     }
 
-    await ctx.runMutation(internal.autopilot._scheduleNextStep, { projectId, delayMs: 3000 });
+    // 9. Schedule next step after 3s (for both successful handler execution and non-idle states)
+    await ctx.runMutation(internal.autopilot._scheduleNextStep, {
+      projectId,
+      jobId,
+      delayMs: 3000,
+    });
   },
 });
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-async function handleMemeRecall(ctx: any, projectId: any, ns: any) {
-  const claimed = await ctx.runMutation(internal.autopilot._claimNode, { projectId, nodeKey: "memeRecall" });
-  if (!claimed) return;
+// ─── Handler: mediaUpload ─────────────────────────────────────────────────────
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function handleMediaUpload(ctx: any, projectId: any, jobId: any, ns: any, nodeIndex: number, confirmedNodeIndices: number[]) {
+  const images: any[] = ns.mediaUpload?.images ?? [];
+
+  // Ready condition: images non-empty AND all aiDescriptions present
+  if (images.length === 0) {
+    // No images: schedule a retry to wait for images to be uploaded
+    await ctx.runMutation(internal.autopilot._scheduleNextStep, {
+      projectId,
+      jobId,
+      delayMs: 10000,
+    });
+    return;
+  }
+
+  const allDescribed = images.every((img: any) => img.aiDescription && img.aiDescription.trim().length > 0);
+  if (!allDescribed) {
+    // AI analysis not yet complete: wait and retry
+    await ctx.runMutation(internal.autopilot._updateJob, {
+      jobId,
+      patch: { retryCount: (await ctx.runQuery(internal.autopilot._getJob, { jobId })).retryCount + 1 },
+    });
+    await ctx.runMutation(internal.autopilot._scheduleNextStep, {
+      projectId,
+      jobId,
+      delayMs: 10000,
+    });
+    return;
+  }
+
+  // All images have AI descriptions: confirm mediaUpload by marking as confirmed
+  // The mediaUpload node may already be "idle" or "completed" after AI analysis
+  // We just need to mark it as confirmed so the pipeline can proceed
+  const updatedConfirmed = [...confirmedNodeIndices, nodeIndex];
+  await ctx.runMutation(internal.autopilot._updateJob, {
+    jobId,
+    patch: {
+      confirmedNodeIndices: updatedConfirmed,
+      currentNodeIndex: nodeIndex + 1,
+      retryCount: 0,
+    },
+  });
+}
+
+// ─── Handler: memeRecall ──────────────────────────────────────────────────────
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function handleMemeRecall(ctx: any, projectId: any, jobId: any, ns: any, nodeIndex: number, confirmedNodeIndices: number[]) {
+  // memeRecall status === "idle" means AI analysis is complete; confirm it
   const emotionTags: string[] = ns.copywriting?.emotionTags ?? ns.mediaUpload?.emotionTags ?? [];
   const imageUrls: string[] = (ns.mediaUpload?.images ?? []).map((i: any) => i.url);
 
@@ -167,13 +281,24 @@ async function handleMemeRecall(ctx: any, projectId: any, ns: any) {
     id: projectId,
     selectedMemes: memes,
   });
+
+  // Mark as confirmed and advance
+  const updatedConfirmed = [...confirmedNodeIndices, nodeIndex];
+  await ctx.runMutation(internal.autopilot._updateJob, {
+    jobId,
+    patch: {
+      confirmedNodeIndices: updatedConfirmed,
+      currentNodeIndex: nodeIndex + 1,
+      retryCount: 0,
+    },
+  });
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-async function handleBgmRecall(ctx: any, projectId: any, ns: any) {
-  const claimed = await ctx.runMutation(internal.autopilot._claimNode, { projectId, nodeKey: "bgmRecall" });
-  if (!claimed) return;
+// ─── Handler: bgmRecall ───────────────────────────────────────────────────────
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function handleBgmRecall(ctx: any, projectId: any, jobId: any, ns: any, nodeIndex: number, confirmedNodeIndices: number[]) {
+  // bgmRecall status === "idle": randomly select a BGM and confirm
   const emotionTags: string[] = ns.copywriting?.emotionTags ?? ns.mediaUpload?.emotionTags ?? [];
 
   const suggestedBgms = await ctx.runQuery(api.dreamXMedia.getSuggestedBgms, {
@@ -195,13 +320,25 @@ async function handleBgmRecall(ctx: any, projectId: any, ns: any) {
       skipped: true,
     });
   }
+
+  // Mark as confirmed and advance (storyboard generation is triggered as a side-effect by _completeBgmRecall)
+  const updatedConfirmed = [...confirmedNodeIndices, nodeIndex];
+  await ctx.runMutation(internal.autopilot._updateJob, {
+    jobId,
+    patch: {
+      confirmedNodeIndices: updatedConfirmed,
+      currentNodeIndex: nodeIndex + 1,
+      retryCount: 0,
+    },
+  });
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-async function handleStoryboard(ctx: any, projectId: any, ns: any) {
-  const claimed = await ctx.runMutation(internal.autopilot._claimNode, { projectId, nodeKey: "storyboard" });
-  if (!claimed) return;
+// ─── Handler: storyboard ─────────────────────────────────────────────────────
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function handleStoryboard(ctx: any, projectId: any, jobId: any, ns: any, nodeIndex: number, confirmedNodeIndices: number[]) {
+  // storyboard status === "idle": BGM recall already triggered generation as side-effect
+  // If it's idle (not generating), it means we need to trigger generation explicitly
   const existingTimeline = ns.storyboard?.timeline;
   if (existingTimeline && existingTimeline.length > 0) {
     await ctx.runMutation(internal.dreamXCanvas._completeStoryboard, {
@@ -209,7 +346,19 @@ async function handleStoryboard(ctx: any, projectId: any, ns: any) {
       timeline: existingTimeline,
       totalDurationMs: ns.storyboard?.totalDurationMs ?? 0,
     });
+
+    // Mark as confirmed and advance
+    const updatedConfirmed = [...confirmedNodeIndices, nodeIndex];
+    await ctx.runMutation(internal.autopilot._updateJob, {
+      jobId,
+      patch: {
+        confirmedNodeIndices: updatedConfirmed,
+        currentNodeIndex: nodeIndex + 1,
+        retryCount: 0,
+      },
+    });
   } else {
+    // Trigger storyboard generation
     const images = (ns.mediaUpload?.images ?? []).map((i: any) => ({ url: i.url, fileName: i.fileName }));
     const selectedMemes = ns.memeRecall?.selectedMemes ?? [];
     await ctx.runAction(api.dreamXAI.generateStoryboard, {
@@ -217,14 +366,16 @@ async function handleStoryboard(ctx: any, projectId: any, ns: any) {
       images,
       selectedMemes,
     });
+    // After triggering generation, the node transitions to "generating"
+    // The next step check will detect this and wait
   }
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-async function handleTTSSelection(ctx: any, projectId: any, ns: any) {
-  const claimed = await ctx.runMutation(internal.autopilot._claimNode, { projectId, nodeKey: "ttsSelection" });
-  if (!claimed) return;
+// ─── Handler: ttsSelection ───────────────────────────────────────────────────
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function handleTtsSelection(ctx: any, projectId: any, jobId: any, ns: any, nodeIndex: number, confirmedNodeIndices: number[]) {
+  // ttsSelection status === "idle" means storyboard is completed and ttsSelection is unlocked
   const emotionTags: string[] = ns.copywriting?.emotionTags ?? ns.mediaUpload?.emotionTags ?? [];
   const { voiceType, voiceName } = selectVoiceByEmotion(emotionTags);
 
@@ -251,39 +402,60 @@ async function handleTTSSelection(ctx: any, projectId: any, ns: any) {
       audioDurationMs: ns.storyboard?.totalDurationMs ?? 0,
       skipped: true,
     });
-    return;
+  } else {
+    await ctx.runAction(api.dreamXAI.generateTTSPerSegment, {
+      projectId,
+      voiceType,
+      segments,
+      subtitlesChanged: false,
+      imageCount: ns.mediaUpload?.images?.length ?? 0,
+    });
+
+    const totalAudioMs = timeline.reduce((sum: number, item: any) => sum + (item.durationMs ?? 0), 0);
+
+    const currentSnapshot = segments.map((s) => {
+      const tiIdx = Math.floor(s.itemIdx / 100000);
+      const subIdx = s.itemIdx % 100000;
+      return `${tiIdx}_${subIdx}:${s.text}`;
+    }).join("|");
+
+    await ctx.runMutation(internal.dreamXCanvas._completeTTSSelection, {
+      id: projectId,
+      selectedVoiceType: voiceType,
+      selectedVoiceName: voiceName,
+      audioUrl: "",
+      audioDurationMs: totalAudioMs || (ns.storyboard?.totalDurationMs ?? 0),
+      subtitleSnapshot: currentSnapshot,
+    });
   }
 
-  await ctx.runAction(api.dreamXAI.generateTTSPerSegment, {
-    projectId,
-    voiceType,
-    segments,
-    subtitlesChanged: false,
-    imageCount: ns.mediaUpload?.images?.length ?? 0,
-  });
-
-  const currentSnapshot = segments.map((s) => {
-    const tiIdx = Math.floor(s.itemIdx / 100000);
-    const subIdx = s.itemIdx % 100000;
-    return `${tiIdx}_${subIdx}:${s.text}`;
-  }).join("|");
-
-  const totalAudioMs = timeline.reduce((sum: number, item: any) => sum + (item.durationMs ?? 0), 0);
-
-  await ctx.runMutation(internal.dreamXCanvas._completeTTSSelection, {
-    id: projectId,
-    selectedVoiceType: voiceType,
-    selectedVoiceName: voiceName,
-    audioUrl: "",
-    audioDurationMs: totalAudioMs || (ns.storyboard?.totalDurationMs ?? 0),
-    subtitleSnapshot: currentSnapshot,
+  // Mark as confirmed and advance
+  const updatedConfirmed = [...confirmedNodeIndices, nodeIndex];
+  await ctx.runMutation(internal.autopilot._updateJob, {
+    jobId,
+    patch: {
+      confirmedNodeIndices: updatedConfirmed,
+      currentNodeIndex: nodeIndex + 1,
+      retryCount: 0,
+    },
   });
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-async function handleCapcutBuild(ctx: any, projectId: any) {
-  const claimed = await ctx.runMutation(internal.autopilot._claimNode, { projectId, nodeKey: "capcutBuild" });
-  if (!claimed) return;
+// ─── Handler: capcutBuild ────────────────────────────────────────────────────
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function handleCapcutBuild(ctx: any, projectId: any, jobId: any, nodeIndex: number, confirmedNodeIndices: number[]) {
+  // capcutBuild status === "idle" means ttsSelection is completed and capcutBuild is unlocked
   await ctx.runAction(api.capcutBuilder.buildCapcutProject, { projectId });
+
+  // Mark as confirmed and advance
+  const updatedConfirmed = [...confirmedNodeIndices, nodeIndex];
+  await ctx.runMutation(internal.autopilot._updateJob, {
+    jobId,
+    patch: {
+      confirmedNodeIndices: updatedConfirmed,
+      currentNodeIndex: nodeIndex + 1,
+      retryCount: 0,
+    },
+  });
 }

@@ -212,19 +212,6 @@ export const updateNodeState = mutation({
     }
 
     await ctx.db.patch(args.id, { nodeStates: updated, updatedAt: Date.now() });
-
-    if ((project as any).autopilotEnabled) {
-      const oldJobId = (project as any).autopilotScheduledJobId;
-      if (oldJobId) {
-        try { await ctx.scheduler.cancel(oldJobId); } catch {}
-      }
-      const jobId = await ctx.scheduler.runAfter(
-        1000,
-        internal.autopilotActions.runAutopilotStep,
-        { projectId: args.id }
-      );
-      await ctx.db.patch(args.id, { autopilotScheduledJobId: jobId, updatedAt: Date.now() });
-    }
   },
 });
 
@@ -500,19 +487,6 @@ export const resetFromNode = mutation({
     }
 
     await ctx.db.patch(args.id, { nodeStates: updated, updatedAt: Date.now() });
-
-    if ((project as any).autopilotEnabled) {
-      const oldJobId = (project as any).autopilotScheduledJobId;
-      if (oldJobId) {
-        try { await ctx.scheduler.cancel(oldJobId); } catch {}
-      }
-      const jobId = await ctx.scheduler.runAfter(
-        1000,
-        internal.autopilotActions.runAutopilotStep,
-        { projectId: args.id }
-      );
-      await ctx.db.patch(args.id, { autopilotScheduledJobId: jobId, updatedAt: Date.now() });
-    }
   },
 });
 
