@@ -101,6 +101,7 @@
 - Q: 托管成功完成全流程后，托管状态如何持久化？ → A: 自动清除：完成后 `autopilotEnabled = false`，项目显示为普通已完成
 - Q: 节点处于 generating 状态时，reactive 调度链如何等待其完成？ → A: 调度延迟重试：节点仍在 generating 时，调度 N 秒后重检
 - Q: generating 状态的延迟重试间隔和最大重试次数分别是多少？ → A: 重试间隔固定为 10 秒，最大重试次数为 30 次（即单节点最长等待 5 分钟）；超出后托管停止并标记失败
+- Q: 用户关闭AI托管时，如何取消已调度的 Convex 延迟重试任务？ → A: 使用 Convex `ctx.scheduler.cancel(id)`；`AutopilotJob` 必须持久化 `pendingScheduledJobId`（`Id<"_scheduled_functions"> | null`）字段，调度时写入、执行后清空 null、关闭托管时读取并取消
 
 ---
 
@@ -122,13 +123,14 @@
 - **FR-012**: Dashboard MUST显示哪些项目当前处于AI托管中，使用可识别的视觉标识；托管失败时标识MUST变为"失败"状态（有别于"托管中"）
 - **FR-013**: 当用户重置到某节点后开启AI托管，系统MUST从该节点开始推进，不重新执行已completed的前序节点
 - **FR-014**: 系统MUST在素材上传节点无已上传图片时，拒绝开启AI托管并给出明确提示
-- **FR-015**: 节点生成失败（error状态）时，AI托管MUST停止推进并将托管状态设为关闭；系统MUST通过 Toast 通知用户（若在编辑页）并将 Dashboard 项目标识更新为"失败"状态
+- **FR-015**: 节点生成失败（error状态）时，AI托管MUST停止推进并将托管状态设为关闭；系统MUST通过 Toast 通知用户（若在编辑页）并将 Dashboard 项目标识更新为\"失败\"状态
+- **FR-016**: 系统MUST在每次通过 `ctx.scheduler.runAfter()` 调度延迟重试任务时，将返回的 Convex scheduler job ID（`Id<"_scheduled_functions">`）持久化到对应 `AutopilotJob` 记录的 `pendingScheduledJobId` 字段；当用户关闭AI托管时，系统MUST读取该字段并调用 `ctx.scheduler.cancel(pendingScheduledJobId)` 取消待执行的延迟重试任务；任务执行后 `pendingScheduledJobId` MUST重置为 null
 
 ### Key Entities
 
 - **Project（项目）**: 包含6个有序节点状态的工作流实体，持有 `autopilotEnabled` 标志（布尔值）；托管完成或失败后自动置为 false
 - **NodeState（节点状态）**: 每个节点的当前状态（locked / idle / generating / completed / error）及其数据
-- **AutopilotJob（托管任务）**: 后端 reactive 调度任务，节点状态变更后触发下一步检查并确认，与项目绑定；完成或失败后自行销毁
+- **AutopilotJob（托管任务）**: 后端 reactive 调度任务，节点状态变更后触发下一步检查并确认，与项目绑定；完成或失败后自行销毁。必需字段：`projectId`（绑定项目）、`currentNodeIndex`（当前处理节点索引）、`retryCount`（当前节点已重试次数）、`pendingScheduledJobId`（当前待执行的 Convex scheduler job ID，类型为 `Id<"_scheduled_functions"> | null`，用于在用户关闭托管时调用 `ctx.scheduler.cancel()` 取消该延迟重试任务）
 - **NodeConfirmation（节点确认）**: 托管对某节点执行的一次确认操作，等价于用户手动点击确认按钮
 
 ---
@@ -155,5 +157,5 @@
 - 各节点的"确认"操作使用现有的内部mutation（internal mutation）实现，与用户手动操作调用同一套逻辑
 - 分镜脚本节点的生成在BGM召回确认时作为副作用自动触发，属于当前系统设计，本规格遵循此设计
 - 每次托管任务只处理一个"当前最早的未完成节点"，串行推进
-- 用户关闭AI托管时，系统取消已调度但尚未执行的下一步任务，正在执行的生成操作不中断
+- 用户关闭AI托管时，系统取消已调度但尚未执行的下一步任务，正在执行的生成操作不中断；取消机制依赖 Convex scheduler 的 `ctx.scheduler.cancel(id)` API，要求 `AutopilotJob` 持久化 `pendingScheduledJobId` 字段以便查询和取消
 - 积分消耗逻辑保持不变，由各节点现有逻辑处理，托管层不另外管理积分
