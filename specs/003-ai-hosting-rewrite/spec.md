@@ -102,7 +102,8 @@
 - Q: 节点处于 generating 状态时，reactive 调度链如何等待其完成？ → A: 调度延迟重试：节点仍在 generating 时，调度 N 秒后重检
 - Q: generating 状态的延迟重试间隔和最大重试次数分别是多少？ → A: 重试间隔固定为 10 秒，最大重试次数为 30 次（即单节点最长等待 5 分钟）；超出后托管停止并标记失败
 - Q: 用户关闭AI托管时，如何取消已调度的 Convex 延迟重试任务？ → A: 使用 Convex `ctx.scheduler.cancel(id)`；`AutopilotJob` 必须持久化 `pendingScheduledJobId`（`Id<"_scheduled_functions"> | null`）字段，调度时写入、执行后清空 null、关闭托管时读取并取消
-- Q: Project 实体仅有 `autopilotEnabled: boolean`，但 Dashboard 需区分"托管中"、"失败"、"普通已完成"三种状态，单一布尔字段无法编码三态，如何解决此数据模型缺口？ → A: 在 Project 实体新增 `autopilotFailed: boolean`（默认 false）字段；Dashboard 读取规则：`autopilotEnabled=true` → "托管中"；`autopilotEnabled=false && autopilotFailed=true` → "失败"；`autopilotEnabled=false && autopilotFailed=false` → 普通状态。托管成功完成时同时写 `autopilotEnabled=false, autopilotFailed=false`；托管失败时写 `autopilotEnabled=false, autopilotFailed=true`；用户重新开启托管时写 `autopilotEnabled=true, autopilotFailed=false`（清除旧失败标记）
+- Q: Project 实体仅有 `autopilotEnabled: boolean`，但 Dashboard 需区分\"托管中\"、\"失败\"、\"普通已完成\"三种状态，单一布尔字段无法编码三态，如何解决此数据模型缺口？ → A: 在 Project 实体新增 `autopilotFailed: boolean`（默认 false）字段；Dashboard 读取规则：`autopilotEnabled=true` → \"托管中\"；`autopilotEnabled=false && autopilotFailed=true` → \"失败\"；`autopilotEnabled=false && autopilotFailed=false` → 普通状态。托管成功完成时同时写 `autopilotEnabled=false, autopilotFailed=false`；托管失败时写 `autopilotEnabled=false, autopilotFailed=true`；用户重新开启托管时写 `autopilotEnabled=true, autopilotFailed=false`（清除旧失败标记）
+- Q: `AutopilotJob` 表没有唯一性约束，若同一 `projectId` 存在多条记录，多条 reactive 调度链并发执行将导致节点确认被重复触发，违反 FR-001，如何确保每个项目最多只有一个活跃的 `AutopilotJob`？ → A: `AutopilotJob` 表MUST按 `projectId` 建立唯一索引（`by_project`），每个项目同时只允许存在一条 `AutopilotJob` 记录；开启新托管会话时，系统MUST先查询并删除同一 `projectId` 的已有孤立记录（取消其 `pendingScheduledJobId`）后再创建新记录，确保唯一性不变式在整个生命周期内成立
 
 ---
 
@@ -126,12 +127,13 @@
 - **FR-014**: 系统MUST在素材上传节点无已上传图片时，拒绝开启AI托管并给出明确提示
 - **FR-015**: 节点生成失败（error状态）或托管超时时，AI托管MUST停止推进并同时将 `autopilotEnabled` 置为 false、`autopilotFailed` 置为 true；系统MUST通过 Toast 通知用户（若在编辑页）并将 Dashboard 项目标识更新为"失败"状态
 - **FR-016**: 系统MUST在每次通过 `ctx.scheduler.runAfter()` 调度延迟重试任务时，将返回的 Convex scheduler job ID（`Id<"_scheduled_functions">`）持久化到对应 `AutopilotJob` 记录的 `pendingScheduledJobId` 字段；当用户关闭AI托管时，系统MUST读取该字段并调用 `ctx.scheduler.cancel(pendingScheduledJobId)` 取消待执行的延迟重试任务；任务执行后 `pendingScheduledJobId` MUST重置为 null
+- **FR-017**: 系统MUST确保每个 `projectId` 在任意时刻最多存在一条活跃的 `AutopilotJob` 记录（通过 `by_project` 唯一索引强制执行）；开启新托管会话时，系统MUST在创建新 `AutopilotJob` 前先查询同一 `projectId` 的已有孤立记录，若存在则取消其 `pendingScheduledJobId`（调用 `ctx.scheduler.cancel()`）并删除该记录，以防止多条并发 reactive 调度链同时运行并重复触发节点确认
 
 ### Key Entities
 
 - **Project（项目）**: 包含6个有序节点状态的工作流实体，持有以下托管相关字段：`autopilotEnabled: boolean`（是否正在托管中，默认 false）；`autopilotFailed: boolean`（上次托管是否以失败结束，默认 false）。Dashboard 三态读取规则：`autopilotEnabled=true` → "托管中"；`autopilotEnabled=false && autopilotFailed=true` → "失败"；`autopilotEnabled=false && autopilotFailed=false` → 普通状态（未托管或成功完成）。托管成功完成时写 `autopilotEnabled=false, autopilotFailed=false`；托管失败时写 `autopilotEnabled=false, autopilotFailed=true`；用户重新开启托管时写 `autopilotEnabled=true, autopilotFailed=false`（清除旧失败标记）
 - **NodeState（节点状态）**: 每个节点的当前状态（locked / idle / generating / completed / error）及其数据
-- **AutopilotJob（托管任务）**: 后端 reactive 调度任务，节点状态变更后触发下一步检查并确认，与项目绑定；完成或失败后自行销毁。必需字段：`projectId`（绑定项目）、`currentNodeIndex`（当前处理节点索引）、`retryCount`（当前节点已重试次数）、`pendingScheduledJobId`（当前待执行的 Convex scheduler job ID，类型为 `Id<"_scheduled_functions"> | null`，用于在用户关闭托管时调用 `ctx.scheduler.cancel()` 取消该延迟重试任务）
+- **AutopilotJob（托管任务）**: 后端 reactive 调度任务，节点状态变更后触发下一步检查并确认，与项目绑定；完成或失败后自行销毁。**唯一性约束**：每个 `projectId` 在任意时刻最多存在一条 `AutopilotJob` 记录（通过 `by_project` 索引强制执行）；开启新托管会话时，系统MUST先查询同一 `projectId` 的已有孤立记录，若存在则取消其 `pendingScheduledJobId`（调用 `ctx.scheduler.cancel()`）并删除该记录，再创建新记录。必需字段：`projectId`（绑定项目）、`currentNodeIndex`（当前处理节点索引）、`retryCount`（当前节点已重试次数）、`pendingScheduledJobId`（当前待执行的 Convex scheduler job ID，类型为 `Id<"_scheduled_functions"> | null`，用于在用户关闭托管时调用 `ctx.scheduler.cancel()` 取消该延迟重试任务）
 - **NodeConfirmation（节点确认）**: 托管对某节点执行的一次确认操作，等价于用户手动点击确认按钮
 
 ---
