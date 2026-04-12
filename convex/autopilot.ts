@@ -311,19 +311,27 @@ export const _updateJob = internalMutation({
 export const _scheduleNextStep = internalMutation({
   args: {
     projectId: v.id("dreamXProjects"),
+    jobId: v.id("autopilotJobs"),
     delayMs: v.number(),
   },
   handler: async (ctx, args) => {
+    // Verify the job still exists and autopilot is still enabled before scheduling
     const project = await ctx.db.get(args.projectId);
     if (!project || !project.autopilotEnabled) return;
 
-    const jobId = await ctx.scheduler.runAfter(
+    const job = await ctx.db.get(args.jobId);
+    if (!job) return;
+
+    // Schedule the next step, passing both projectId and jobId
+    const scheduledId = await ctx.scheduler.runAfter(
       args.delayMs,
       internal.autopilotActions.runAutopilotStep,
-      { projectId: args.projectId }
+      { projectId: args.projectId, jobId: args.jobId }
     );
-    await ctx.db.patch(args.projectId, {
-      autopilotScheduledJobId: jobId,
+
+    // Write pendingScheduledJobId to the job record (not the project)
+    await ctx.db.patch(args.jobId, {
+      pendingScheduledJobId: scheduledId,
       updatedAt: Date.now(),
     });
   },
