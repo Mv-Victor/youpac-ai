@@ -207,8 +207,12 @@ export const getAutopilotProjects = query({
       .withIndex("by_user", (q) => q.eq("userId", identity.subject))
       .collect();
     return projects
-      .filter((p) => p.autopilotEnabled === true)
-      .map((p) => ({ projectId: p._id, title: p.title }));
+      .filter((p) => p.autopilotEnabled === true || p.autopilotFailed === true)
+      .map((p) => ({
+        projectId: p._id,
+        title: p.title,
+        failed: p.autopilotFailed === true,
+      }));
   },
 });
 

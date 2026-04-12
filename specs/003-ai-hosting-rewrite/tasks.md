@@ -31,7 +31,7 @@
 - [x] T002 重写 `convex/autopilot.ts`：实现 `enableAutopilot` public mutation（鉴权、images 非空校验、删除旧 job、创建新 AutopilotJob、调度 runAutopilotStep，幂等忽略已运行托管）
 - [x] T003 在 `convex/autopilot.ts` 实现 `disableAutopilot` public mutation（鉴权、取消 pendingScheduledJobId、删除 job 记录、写 autopilotEnabled=false）
 - [x] T004 [P] 在 `convex/autopilot.ts` 实现 `getProjectAutopilotStatus` public query（返回 `{ enabled, failed } | null`）
-- [ ] T005 [P] 在 `convex/autopilot.ts` 实现 `getAutopilotProjects` public query（返回当前用户所有 autopilotEnabled=true 或 autopilotFailed=true 的项目，含 failed 字段）
+- [x] T005 [P] 在 `convex/autopilot.ts` 实现 `getAutopilotProjects` public query（返回当前用户所有 autopilotEnabled=true 或 autopilotFailed=true 的项目，含 failed 字段）
 - [ ] T006 [P] 在 `convex/autopilot.ts` 实现 `_stopAutopilot` internalMutation（写 autopilotEnabled=false, autopilotFailed=false，删除 AutopilotJob）
 - [ ] T007 [P] 在 `convex/autopilot.ts` 实现 `_markFailed` internalMutation（写 autopilotEnabled=false, autopilotFailed=true，删除 AutopilotJob）
 - [ ] T008 [P] 在 `convex/autopilot.ts` 实现 `_updateJob` internalMutation（通用 patch AutopilotJob 字段）
