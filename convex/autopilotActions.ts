@@ -196,34 +196,33 @@ async function handleMediaUpload(ctx: any, projectId: any, jobId: any, ns: any, 
   const images: any[] = ns.mediaUpload?.images ?? [];
 
   // Ready condition: images non-empty AND all aiDescriptions present
+  // If not ready, return without scheduling — the outer step 9 will schedule a 3s retry
   if (images.length === 0) {
-    // No images: schedule a retry to wait for images to be uploaded
-    await ctx.runMutation(internal.autopilot._scheduleNextStep, {
-      projectId,
-      jobId,
-      delayMs: 10000,
-    });
+    // No images yet: just return and let the outer loop retry
     return;
   }
 
   const allDescribed = images.every((img: any) => img.aiDescription && img.aiDescription.trim().length > 0);
   if (!allDescribed) {
-    // AI analysis not yet complete: wait and retry
-    await ctx.runMutation(internal.autopilot._updateJob, {
-      jobId,
-      patch: { retryCount: (await ctx.runQuery(internal.autopilot._getJob, { jobId })).retryCount + 1 },
-    });
-    await ctx.runMutation(internal.autopilot._scheduleNextStep, {
-      projectId,
-      jobId,
-      delayMs: 10000,
-    });
+    // AI analysis not yet complete: increment retryCount and let outer loop schedule retry
+    const currentJob = await ctx.runQuery(internal.autopilot._getJob, { jobId });
+    if (currentJob) {
+      await ctx.runMutation(internal.autopilot._updateJob, {
+        jobId,
+        patch: { retryCount: currentJob.retryCount + 1 },
+      });
+    }
     return;
   }
 
-  // All images have AI descriptions: confirm mediaUpload by marking as confirmed
-  // The mediaUpload node may already be "idle" or "completed" after AI analysis
-  // We just need to mark it as confirmed so the pipeline can proceed
+  // All images have AI descriptions: confirm mediaUpload by marking node as completed in project
+  await ctx.runMutation(internal.dreamXCanvas._updateNodeState, {
+    id: projectId,
+    nodeKey: "mediaUpload",
+    patch: { status: "completed" },
+  });
+
+  // Update job: mark this node as confirmed and advance
   const updatedConfirmed = [...confirmedNodeIndices, nodeIndex];
   await ctx.runMutation(internal.autopilot._updateJob, {
     jobId,
