@@ -248,6 +248,30 @@ export const _stopAutopilot = internalMutation({
   },
 });
 
+export const _markFailed = internalMutation({
+  args: {
+    projectId: v.id("dreamXProjects"),
+    reason: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    // Write autopilotEnabled=false, autopilotFailed=true (failure path)
+    await ctx.db.patch(args.projectId, {
+      autopilotEnabled: false,
+      autopilotFailed: true,
+      updatedAt: Date.now(),
+    });
+
+    // Delete the AutopilotJob record for this project
+    const jobs = await ctx.db
+      .query("autopilotJobs")
+      .withIndex("by_project", (q) => q.eq("projectId", args.projectId))
+      .collect();
+    for (const job of jobs) {
+      await ctx.db.delete(job._id);
+    }
+  },
+});
+
 export const _scheduleNextStep = internalMutation({
   args: {
     projectId: v.id("dreamXProjects"),
