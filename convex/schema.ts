@@ -276,6 +276,7 @@ export default defineSchema({
     updatedAt: v.number(),
     isArchived: v.boolean(),
     autopilotEnabled: v.optional(v.boolean()),
+    autopilotFailed: v.optional(v.boolean()),
     autopilotScheduledJobId: v.optional(v.id("_scheduled_functions")),
     nodeStates: v.object({
       mediaUpload: v.object({
@@ -413,6 +414,17 @@ export default defineSchema({
   })
     .index("by_user", ["userId"])
     .index("by_user_archived", ["userId", "isArchived"]),
+
+  autopilotJobs: defineTable({
+    projectId: v.id("dreamXProjects"),
+    currentNodeIndex: v.number(),
+    retryCount: v.number(),
+    pendingScheduledJobId: v.optional(v.id("_scheduled_functions")),
+    confirmedNodeIndices: v.array(v.number()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_project", ["projectId"]),
 
   redeemCodes: defineTable({
     code: v.string(),
