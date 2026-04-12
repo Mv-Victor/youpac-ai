@@ -52,7 +52,7 @@
 
 - [x] T011 [US1] 在 `convex/autopilotActions.ts` 的 `runAutopilotStep` 中实现 `handleMediaUpload` handler（检查 images.length > 0 且所有 aiDescription 非空，调用 `internal.autopilot._completeMediaUpload` 或等效确认 mutation）
 - [x] T012 [US1] 在 `convex/autopilotActions.ts` 的 `runAutopilotStep` 中实现 `handleMemeRecall` handler（检查 memeRecall status === idle，调用 `_completeMemeRecall` internalMutation）
-- [ ] T013 [US1] 在 `convex/autopilotActions.ts` 的 `runAutopilotStep` 中实现 `handleBgmRecall` handler（检查 bgmRecall status === idle，随机选取一个 BGM，调用 bgmRecall 确认 mutation，同步触发 storyboard 生成）
+- [x] T013 [US1] 在 `convex/autopilotActions.ts` 的 `runAutopilotStep` 中实现 `handleBgmRecall` handler（检查 bgmRecall status === idle，随机选取一个 BGM，调用 bgmRecall 确认 mutation，同步触发 storyboard 生成）
 - [ ] T014 [US1] 在 `convex/autopilotActions.ts` 的 `runAutopilotStep` 中实现 `handleStoryboard` handler（storyboard 由 bgmRecall 确认时已触发，此处检测 status：completed→推进，generating→重试，error→markFailed）
 - [ ] T015 [US1] 在 `convex/autopilotActions.ts` 的 `runAutopilotStep` 中实现 `handleTtsSelection` handler（检查 ttsSelection status === idle，调用生成配音 mutation）
 - [ ] T016 [US1] 在 `convex/autopilotActions.ts` 的 `runAutopilotStep` 中实现 `handleCapcutBuild` handler（检查 capcutBuild status === idle，调用生成 CapCut 工程 mutation）
