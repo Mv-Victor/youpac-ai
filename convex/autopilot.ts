@@ -97,6 +97,43 @@ export const enableAutopilot = mutation({
   },
 });
 
+export const disableAutopilot = mutation({
+  args: {
+    projectId: v.id("dreamXProjects"),
+  },
+  handler: async (ctx, args) => {
+    // 1. Auth check
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Unauthorized");
+
+    const project = await ctx.db.get(args.projectId);
+    if (!project || project.userId !== identity.subject) throw new Error("Unauthorized");
+
+    // 2. Find and clean up all AutopilotJob records for this project
+    const jobs = await ctx.db
+      .query("autopilotJobs")
+      .withIndex("by_project", (q) => q.eq("projectId", args.projectId))
+      .collect();
+
+    for (const job of jobs) {
+      if (job.pendingScheduledJobId) {
+        try {
+          await ctx.scheduler.cancel(job.pendingScheduledJobId);
+        } catch {
+          // Job may have already run or been cancelled, ignore
+        }
+      }
+      await ctx.db.delete(job._id);
+    }
+
+    // 3. Write project: autopilotEnabled=false (do NOT change autopilotFailed)
+    await ctx.db.patch(args.projectId, {
+      autopilotEnabled: false,
+      updatedAt: Date.now(),
+    });
+  },
+});
+
 // ─── Legacy autopilot (to be replaced in T003-T009) ──────────────────────────
 
 export const setAutopilot = mutation({
