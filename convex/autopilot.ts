@@ -230,16 +230,21 @@ export const getProjectAutopilot = query({
 export const _stopAutopilot = internalMutation({
   args: { projectId: v.id("dreamXProjects") },
   handler: async (ctx, args) => {
-    const project = await ctx.db.get(args.projectId);
-    if (!project) return;
-    if (project.autopilotScheduledJobId) {
-      try { await ctx.scheduler.cancel(project.autopilotScheduledJobId); } catch {}
-    }
+    // Write autopilotEnabled=false, autopilotFailed=false (success path)
     await ctx.db.patch(args.projectId, {
       autopilotEnabled: false,
-      autopilotScheduledJobId: undefined,
+      autopilotFailed: false,
       updatedAt: Date.now(),
     });
+
+    // Delete the AutopilotJob record for this project
+    const jobs = await ctx.db
+      .query("autopilotJobs")
+      .withIndex("by_project", (q) => q.eq("projectId", args.projectId))
+      .collect();
+    for (const job of jobs) {
+      await ctx.db.delete(job._id);
+    }
   },
 });
 
