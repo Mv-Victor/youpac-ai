@@ -103,6 +103,24 @@ export const runAutopilotStep = internalAction({
 
     const nodeStatus = ns[currentNode]?.status;
 
+    // 5a. Special case: storyboard node — delegate ALL status handling to handleStoryboard
+    //     (T014: storyboard checks status internally: completed→advance, generating→retry, error→markFailed, idle→trigger)
+    //     handleStoryboard is responsible for scheduling (or not scheduling) the next step.
+    if (currentNode === "storyboard") {
+      const confirmedNodeIndices: number[] = job.confirmedNodeIndices ?? [];
+      try {
+        await handleStoryboard(ctx, projectId, jobId, ns, currentNodeIndex, confirmedNodeIndices);
+      } catch (e: any) {
+        console.error(`[Autopilot] Error in handler for node storyboard:`, e?.message ?? e);
+        await ctx.runMutation(internal.autopilot._markFailed, {
+          projectId,
+          reason: `Handler error in node storyboard: ${e?.message ?? String(e)}`,
+        });
+      }
+      // Storyboard handler manages its own scheduling; do NOT schedule again here
+      return;
+    }
+
     // 5. Current node in error → mark failed
     if (nodeStatus === "error") {
       await ctx.runMutation(internal.autopilot._markFailed, {
@@ -161,14 +179,12 @@ export const runAutopilotStep = internalAction({
           await handleMediaUpload(ctx, projectId, jobId, ns, currentNodeIndex, confirmedNodeIndices);
         } else if (currentNode === "memeRecall") {
           await handleMemeRecall(ctx, projectId, jobId, ns, currentNodeIndex, confirmedNodeIndices);
-        } else if (currentNode === "bgmRecall") {
-          await handleBgmRecall(ctx, projectId, jobId, ns, currentNodeIndex, confirmedNodeIndices);
-        } else if (currentNode === "storyboard") {
-          await handleStoryboard(ctx, projectId, jobId, ns, currentNodeIndex, confirmedNodeIndices);
         } else if (currentNode === "ttsSelection") {
           await handleTtsSelection(ctx, projectId, jobId, ns, currentNodeIndex, confirmedNodeIndices);
         } else if (currentNode === "capcutBuild") {
           await handleCapcutBuild(ctx, projectId, jobId, currentNodeIndex, confirmedNodeIndices);
+        } else if (currentNode === "bgmRecall") {
+          await handleBgmRecall(ctx, projectId, jobId, ns, currentNodeIndex, confirmedNodeIndices);
         }
       } catch (e: any) {
         console.error(`[Autopilot] Error in handler for node ${currentNode}:`, e?.message ?? e);
@@ -333,20 +349,23 @@ async function handleBgmRecall(ctx: any, projectId: any, jobId: any, ns: any, no
 }
 
 // ─── Handler: storyboard ─────────────────────────────────────────────────────
+//
+// T014: storyboard node status check (called for ALL storyboard statuses via step 5a)
+//   - completed  → mark confirmed, advance currentNodeIndex, schedule 3s next step
+//   - generating → increment retryCount, schedule 10s retry
+//   - error      → markFailed (no next step scheduled)
+//   - idle       → trigger generation (blocking), then on completion mark confirmed+advance+schedule
+//
+// Note: This handler is responsible for ALL scheduling when storyboard is current node.
+// The frontend auto-trigger skips storyboard when autopilotEnabled=true, so autopilot
+// must trigger generation explicitly in the idle case.
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function handleStoryboard(ctx: any, projectId: any, jobId: any, ns: any, nodeIndex: number, confirmedNodeIndices: number[]) {
-  // storyboard status === "idle": BGM recall already triggered generation as side-effect
-  // If it's idle (not generating), it means we need to trigger generation explicitly
-  const existingTimeline = ns.storyboard?.timeline;
-  if (existingTimeline && existingTimeline.length > 0) {
-    await ctx.runMutation(internal.dreamXCanvas._completeStoryboard, {
-      id: projectId,
-      timeline: existingTimeline,
-      totalDurationMs: ns.storyboard?.totalDurationMs ?? 0,
-    });
+  const storyboardStatus = ns.storyboard?.status;
 
-    // Mark as confirmed and advance
+  // completed → mark confirmed, advance, schedule next step
+  if (storyboardStatus === "completed") {
     const updatedConfirmed = [...confirmedNodeIndices, nodeIndex];
     await ctx.runMutation(internal.autopilot._updateJob, {
       jobId,
@@ -356,17 +375,97 @@ async function handleStoryboard(ctx: any, projectId: any, jobId: any, ns: any, n
         retryCount: 0,
       },
     });
-  } else {
-    // Trigger storyboard generation
-    const images = (ns.mediaUpload?.images ?? []).map((i: any) => ({ url: i.url, fileName: i.fileName }));
-    const selectedMemes = ns.memeRecall?.selectedMemes ?? [];
-    await ctx.runAction(api.dreamXAI.generateStoryboard, {
+    await ctx.runMutation(internal.autopilot._scheduleNextStep, {
       projectId,
-      images,
-      selectedMemes,
+      jobId,
+      delayMs: 3000,
     });
-    // After triggering generation, the node transitions to "generating"
-    // The next step check will detect this and wait
+    return;
+  }
+
+  // generating → increment retryCount, schedule 10s retry
+  if (storyboardStatus === "generating") {
+    const currentJob = await ctx.runQuery(internal.autopilot._getJob, { jobId });
+    const currentRetryCount = currentJob?.retryCount ?? 0;
+
+    // Timeout check
+    if (currentRetryCount >= 30) {
+      await ctx.runMutation(internal.autopilot._markFailed, {
+        projectId,
+        reason: `Timeout waiting for node storyboard after 30 retries`,
+      });
+      return;
+    }
+
+    await ctx.runMutation(internal.autopilot._updateJob, {
+      jobId,
+      patch: { retryCount: currentRetryCount + 1 },
+    });
+    await ctx.runMutation(internal.autopilot._scheduleNextStep, {
+      projectId,
+      jobId,
+      delayMs: 10000,
+    });
+    return;
+  }
+
+  // error → markFailed (no scheduling)
+  if (storyboardStatus === "error") {
+    await ctx.runMutation(internal.autopilot._markFailed, {
+      projectId,
+      reason: `Node storyboard encountered an error`,
+    });
+    return;
+  }
+
+  // idle → trigger storyboard generation (blocking call)
+  // generateStoryboard: sets node to generating, runs AI, then sets completed/error
+  // The frontend skips this auto-trigger when autopilotEnabled=true, so we must do it here.
+  const images = (ns.mediaUpload?.images ?? []).map((i: any) => ({ url: i.url, fileName: i.fileName }));
+  const selectedMemes = ns.memeRecall?.selectedMemes ?? [];
+  await ctx.runAction(api.dreamXAI.generateStoryboard, {
+    projectId,
+    images,
+    selectedMemes,
+  });
+
+  // After the blocking generateStoryboard call, re-read the updated project to get final status
+  const updatedProject = await ctx.runQuery(api.dreamXCanvas.getProject, { id: projectId });
+  const updatedStoryboardStatus = (updatedProject as any)?.nodeStates?.storyboard?.status;
+
+  if (updatedStoryboardStatus === "completed") {
+    // Mark as confirmed and advance, then schedule next step
+    const updatedConfirmed = [...confirmedNodeIndices, nodeIndex];
+    await ctx.runMutation(internal.autopilot._updateJob, {
+      jobId,
+      patch: {
+        confirmedNodeIndices: updatedConfirmed,
+        currentNodeIndex: nodeIndex + 1,
+        retryCount: 0,
+      },
+    });
+    await ctx.runMutation(internal.autopilot._scheduleNextStep, {
+      projectId,
+      jobId,
+      delayMs: 3000,
+    });
+  } else if (updatedStoryboardStatus === "error") {
+    await ctx.runMutation(internal.autopilot._markFailed, {
+      projectId,
+      reason: `Node storyboard failed during generation`,
+    });
+  } else {
+    // Still generating or unknown state: schedule a 10s retry to re-check
+    const currentJob = await ctx.runQuery(internal.autopilot._getJob, { jobId });
+    await ctx.runMutation(internal.autopilot._updateJob, {
+      jobId,
+      patch: { retryCount: (currentJob?.retryCount ?? 0) + 1 },
+    });
+    await ctx.runMutation(internal.autopilot._scheduleNextStep, {
+      projectId,
+      jobId,
+      delayMs: 10000,
+    });
   }
 }
 
