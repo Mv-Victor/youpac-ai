@@ -102,6 +102,7 @@
 - Q: 节点处于 generating 状态时，reactive 调度链如何等待其完成？ → A: 调度延迟重试：节点仍在 generating 时，调度 N 秒后重检
 - Q: generating 状态的延迟重试间隔和最大重试次数分别是多少？ → A: 重试间隔固定为 10 秒，最大重试次数为 30 次（即单节点最长等待 5 分钟）；超出后托管停止并标记失败
 - Q: 用户关闭AI托管时，如何取消已调度的 Convex 延迟重试任务？ → A: 使用 Convex `ctx.scheduler.cancel(id)`；`AutopilotJob` 必须持久化 `pendingScheduledJobId`（`Id<"_scheduled_functions"> | null`）字段，调度时写入、执行后清空 null、关闭托管时读取并取消
+- Q: Project 实体仅有 `autopilotEnabled: boolean`，但 Dashboard 需区分"托管中"、"失败"、"普通已完成"三种状态，单一布尔字段无法编码三态，如何解决此数据模型缺口？ → A: 在 Project 实体新增 `autopilotFailed: boolean`（默认 false）字段；Dashboard 读取规则：`autopilotEnabled=true` → "托管中"；`autopilotEnabled=false && autopilotFailed=true` → "失败"；`autopilotEnabled=false && autopilotFailed=false` → 普通状态。托管成功完成时同时写 `autopilotEnabled=false, autopilotFailed=false`；托管失败时写 `autopilotEnabled=false, autopilotFailed=true`；用户重新开启托管时写 `autopilotEnabled=true, autopilotFailed=false`（清除旧失败标记）
 
 ---
 
@@ -120,15 +121,15 @@
 - **FR-009**: 分镜脚本节点：MUST在BGM召回节点确认的同时同步触发分镜脚本生成，无需额外等待条件
 - **FR-010**: TTS配音脚本节点：MUST等待分镜脚本节点状态变为completed后，触发生成配音逻辑
 - **FR-011**: CapCut成片节点：MUST在TTS配音脚本节点完成后，触发生成CapCut工程逻辑
-- **FR-012**: Dashboard MUST显示哪些项目当前处于AI托管中，使用可识别的视觉标识；托管失败时标识MUST变为"失败"状态（有别于"托管中"）
+- **FR-012**: Dashboard MUST按 Project 三态规则（`autopilotEnabled=true` → "托管中"；`autopilotEnabled=false && autopilotFailed=true` → "失败"；否则 → 普通状态）显示项目托管标识，三种状态MUST使用视觉上可区分的标识；托管失败标识（"失败"）MUST有别于"托管中"标识
 - **FR-013**: 当用户重置到某节点后开启AI托管，系统MUST从该节点开始推进，不重新执行已completed的前序节点
 - **FR-014**: 系统MUST在素材上传节点无已上传图片时，拒绝开启AI托管并给出明确提示
-- **FR-015**: 节点生成失败（error状态）时，AI托管MUST停止推进并将托管状态设为关闭；系统MUST通过 Toast 通知用户（若在编辑页）并将 Dashboard 项目标识更新为\"失败\"状态
+- **FR-015**: 节点生成失败（error状态）或托管超时时，AI托管MUST停止推进并同时将 `autopilotEnabled` 置为 false、`autopilotFailed` 置为 true；系统MUST通过 Toast 通知用户（若在编辑页）并将 Dashboard 项目标识更新为"失败"状态
 - **FR-016**: 系统MUST在每次通过 `ctx.scheduler.runAfter()` 调度延迟重试任务时，将返回的 Convex scheduler job ID（`Id<"_scheduled_functions">`）持久化到对应 `AutopilotJob` 记录的 `pendingScheduledJobId` 字段；当用户关闭AI托管时，系统MUST读取该字段并调用 `ctx.scheduler.cancel(pendingScheduledJobId)` 取消待执行的延迟重试任务；任务执行后 `pendingScheduledJobId` MUST重置为 null
 
 ### Key Entities
 
-- **Project（项目）**: 包含6个有序节点状态的工作流实体，持有 `autopilotEnabled` 标志（布尔值）；托管完成或失败后自动置为 false
+- **Project（项目）**: 包含6个有序节点状态的工作流实体，持有以下托管相关字段：`autopilotEnabled: boolean`（是否正在托管中，默认 false）；`autopilotFailed: boolean`（上次托管是否以失败结束，默认 false）。Dashboard 三态读取规则：`autopilotEnabled=true` → "托管中"；`autopilotEnabled=false && autopilotFailed=true` → "失败"；`autopilotEnabled=false && autopilotFailed=false` → 普通状态（未托管或成功完成）。托管成功完成时写 `autopilotEnabled=false, autopilotFailed=false`；托管失败时写 `autopilotEnabled=false, autopilotFailed=true`；用户重新开启托管时写 `autopilotEnabled=true, autopilotFailed=false`（清除旧失败标记）
 - **NodeState（节点状态）**: 每个节点的当前状态（locked / idle / generating / completed / error）及其数据
 - **AutopilotJob（托管任务）**: 后端 reactive 调度任务，节点状态变更后触发下一步检查并确认，与项目绑定；完成或失败后自行销毁。必需字段：`projectId`（绑定项目）、`currentNodeIndex`（当前处理节点索引）、`retryCount`（当前节点已重试次数）、`pendingScheduledJobId`（当前待执行的 Convex scheduler job ID，类型为 `Id<"_scheduled_functions"> | null`，用于在用户关闭托管时调用 `ctx.scheduler.cancel()` 取消该延迟重试任务）
 - **NodeConfirmation（节点确认）**: 托管对某节点执行的一次确认操作，等价于用户手动点击确认按钮
@@ -141,9 +142,9 @@
 
 - **SC-001**: 开启AI托管后，在网络和AI服务正常的情况下，全流程6个节点均能在无人工干预下自动完成
 - **SC-002**: 每个节点的托管确认操作在满足完成条件后5秒内触发，不提前也不无限等待
-- **SC-003**: 同一节点在同一次托管流程中确认操作恰好执行一次（不重复、不遗漏）；全流程完成后 `autopilotEnabled` 自动置为 false，Dashboard 标识消失
+- **SC-003**: 同一节点在同一次托管流程中确认操作恰好执行一次（不重复、不遗漏）；全流程完成后 `autopilotEnabled` 自动置为 false 且 `autopilotFailed` 保持 false，Dashboard 标识消失，项目显示普通状态
 - **SC-004**: 用户离开编辑页到Dashboard后，后台托管仍正常运行，直至所有节点完成
-- **SC-005**: Dashboard上托管中的项目标识展示准确，与实际托管状态100%一致
+- **SC-005**: Dashboard上项目的托管标识按 `autopilotEnabled`/`autopilotFailed` 双字段三态规则精确展示，与实际后端状态100%一致；不存在"失败"与"托管中"标识混淆的情况
 - **SC-006**: 节点生成失败时，托管在失败节点停止，不推进后续节点，失败率0误推进
 - **SC-007**: 用户重置到中间节点并重新开启托管后，仅对重置节点及其后续节点执行托管，不重复处理前序节点
 - **SC-008**: 单节点 generating 状态等待的延迟重试间隔恰好为 10 秒（±1 秒误差），且在任意节点重试 30 次后托管停止并标记失败，不产生第 31 次或更多重试调度
@@ -158,4 +159,5 @@
 - 分镜脚本节点的生成在BGM召回确认时作为副作用自动触发，属于当前系统设计，本规格遵循此设计
 - 每次托管任务只处理一个"当前最早的未完成节点"，串行推进
 - 用户关闭AI托管时，系统取消已调度但尚未执行的下一步任务，正在执行的生成操作不中断；取消机制依赖 Convex scheduler 的 `ctx.scheduler.cancel(id)` API，要求 `AutopilotJob` 持久化 `pendingScheduledJobId` 字段以便查询和取消
+- Project 实体持有两个托管状态字段：`autopilotEnabled: boolean` 和 `autopilotFailed: boolean`；成功完成时均为 false，失败时 `autopilotFailed=true`，运行中时 `autopilotEnabled=true`；Dashboard 三态展示依赖这两个字段的组合
 - 积分消耗逻辑保持不变，由各节点现有逻辑处理，托管层不另外管理积分
