@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { Bot, Loader2 } from "lucide-react";
+import { Bot, Loader2, AlertCircle } from "lucide-react";
 import { Button } from "~/components/ui/button";
 import { Badge } from "~/components/ui/badge";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "~/components/ui/tooltip";
@@ -7,7 +7,7 @@ import { useCredits } from "~/contexts/CreditsContext";
 import { toast } from "sonner";
 
 export function AutopilotSwitch({ hasMedia }: { hasMedia?: boolean }) {
-  const { autopilotEnabled, setAutopilotEnabled, autopilotError, clearAutopilotError } = useCredits();
+  const { autopilotEnabled, autopilotFailed, setAutopilotEnabled, autopilotError, clearAutopilotError } = useCredits();
 
   useEffect(() => {
     if (autopilotError) {
@@ -18,10 +18,16 @@ export function AutopilotSwitch({ hasMedia }: { hasMedia?: boolean }) {
 
   return (
     <div className="flex items-center gap-2">
+      {autopilotFailed && (
+        <Badge variant="destructive" className="text-xs gap-1">
+          <AlertCircle className="h-3 w-3" />
+          失败
+        </Badge>
+      )}
       {autopilotEnabled && (
-        <Badge variant="secondary" className="text-xs gap-1 bg-primary/10 text-primary border-primary/20">
+        <Badge variant="secondary" className="text-xs gap-1 bg-violet-500/15 text-violet-600 border-violet-500/20">
           <Loader2 className="h-3 w-3 animate-spin" />
-          自动运行中...
+          托管中
         </Badge>
       )}
       <TooltipProvider>
@@ -31,12 +37,13 @@ export function AutopilotSwitch({ hasMedia }: { hasMedia?: boolean }) {
               variant={autopilotEnabled ? "default" : "outline"}
               size="sm"
               className="gap-1.5 text-xs h-8"
+              disabled={autopilotEnabled}
               onClick={() => {
                 if (!hasMedia) {
                   toast.error("请先上传素材图片，再开启 AI 托管模式");
                   return;
                 }
-                setAutopilotEnabled(!autopilotEnabled);
+                setAutopilotEnabled(true);
               }}
             >
               <Bot className="h-3.5 w-3.5" />

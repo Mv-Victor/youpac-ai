@@ -84,8 +84,8 @@
 
 ### Implementation for User Story 3
 
-- [ ] T019 [US3] 验证 `enableAutopilot` mutation 逻辑中：开启新托管会话时找到 PIPELINE 中第一个 status !== "completed" 的节点作为 `startIndex`，并确保新建 AutopilotJob 时 `confirmedNodeIndices=[]`（不继承旧 job 的确认记录）
-- [ ] T020 [US3] 验证 `runAutopilotStep` 中对于已 completed 的节点（idnex < currentNodeIndex 或 status=completed）直接跳过不重复触发，确保前序节点不受影响
+- [x] T019 [US3] 验证 `enableAutopilot` mutation 逻辑中：开启新托管会话时找到 PIPELINE 中第一个 status !== "completed" 的节点作为 `startIndex`，并确保新建 AutopilotJob 时 `confirmedNodeIndices=[]`（不继承旧 job 的确认记录）
+- [x] T020 [US3] 验证 `runAutopilotStep` 中对于已 completed 的节点（idnex < currentNodeIndex 或 status=completed）直接跳过不重复触发，确保前序节点不受影响
 
 **Checkpoint**: 重置节点后开启托管，仅从重置节点起自动推进，前序已完成节点无变化
 
@@ -99,11 +99,11 @@
 
 ### Implementation for User Story 4
 
-- [ ] T021 [US4] 在 `convex/autopilotActions.ts` 完善 mediaUpload 就绪条件检查：`images.length > 0` 且所有 `images[].aiDescription` 非空，否则调度重试等待（不直接 markFailed）
-- [ ] T022 [US4] 在 `convex/autopilotActions.ts` 完善 memeRecall 就绪条件：status === "idle" 时立即确认（AI 分析已在 generating 阶段完成）
-- [ ] T023 [US4] 在 `convex/autopilotActions.ts` 完善 bgmRecall 就绪条件：status === "idle" 且候选 BGM 列表非空时随机选取并确认，并同步触发 storyboard 生成（无需额外 scheduling）
-- [ ] T024 [US4] 在 `convex/autopilotActions.ts` 完善 ttsSelection 就绪条件：storyboard status === "completed" 后 ttsSelection 自动解锁为 idle，检测 idle 即触发生成配音
-- [ ] T025 [US4] 在 `convex/autopilotActions.ts` 完善 capcutBuild 就绪条件：ttsSelection status === "completed" 后 capcutBuild 自动解锁为 idle，检测 idle 即触发生成 CapCut 工程
+- [x] T021 [US4] 在 `convex/autopilotActions.ts` 完善 mediaUpload 就绪条件检查：`images.length > 0` 且所有 `images[].aiDescription` 非空，否则调度重试等待（不直接 markFailed）
+- [x] T022 [US4] 在 `convex/autopilotActions.ts` 完善 memeRecall 就绪条件：status === "idle" 时立即确认（AI 分析已在 generating 阶段完成）
+- [x] T023 [US4] 在 `convex/autopilotActions.ts` 完善 bgmRecall 就绪条件：status === "idle" 且候选 BGM 列表非空时随机选取并确认，并同步触发 storyboard 生成（无需额外 scheduling）
+- [x] T024 [US4] 在 `convex/autopilotActions.ts` 完善 ttsSelection 就绪条件：storyboard status === "completed" 后 ttsSelection 自动解锁为 idle，检测 idle 即触发生成配音
+- [x] T025 [US4] 在 `convex/autopilotActions.ts` 完善 capcutBuild 就绪条件：ttsSelection status === "completed" 后 capcutBuild 自动解锁为 idle，检测 idle 即触发生成 CapCut 工程
 
 **Checkpoint**: 各节点完成条件精确，无提前触发或遗漏，全流程串行推进无卡死
 
@@ -113,8 +113,8 @@
 
 **Purpose**: 前端订阅新接口，展示托管状态，检测失败时 Toast 通知
 
-- [ ] T026 [P] 修改 `app/contexts/CreditsContext.tsx`：将旧 `getProjectAutopilot` 替换为 `api.autopilot.getProjectAutopilotStatus`（返回 `{ enabled, failed }`），检测 `failed` 由 false 变为 true 时弹出 Toast 通知用户托管失败
-- [ ] T027 [P] 修改 `app/components/dreamx-canvas/AutopilotSwitch.tsx`：调用 `api.autopilot.enableAutopilot` / `api.autopilot.disableAutopilot`（替换旧 `setAutopilot`），`enabled=true` 时按钮置灰/禁用并显示\"托管中\"，`failed=true` 时显示失败状态 badge
+- [x] T026 [P] 修改 `app/contexts/CreditsContext.tsx`：将旧 `getProjectAutopilot` 替换为 `api.autopilot.getProjectAutopilotStatus`（返回 `{ enabled, failed }`），检测 `failed` 由 false 变为 true 时弹出 Toast 通知用户托管失败
+- [x] T027 [P] 修改 `app/components/dreamx-canvas/AutopilotSwitch.tsx`：调用 `api.autopilot.enableAutopilot` / `api.autopilot.disableAutopilot`（替换旧 `setAutopilot`），`enabled=true` 时按钮置灰/禁用并显示\"托管中\"，`failed=true` 时显示失败状态 badge
 
 ---
 

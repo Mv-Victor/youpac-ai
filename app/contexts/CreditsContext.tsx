@@ -1,13 +1,15 @@
-import { createContext, useContext, useState, useEffect } from "react";
+import { createContext, useContext, useState, useEffect, useRef } from "react";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "convex/_generated/api";
 import type { Id } from "convex/_generated/dataModel";
+import { toast } from "sonner";
 
 interface CreditsContextValue {
   balance: number | undefined;
   nodeCosts: Record<string, number>;
   isLoading: boolean;
   autopilotEnabled: boolean;
+  autopilotFailed: boolean;
   setAutopilotEnabled: (enabled: boolean, error?: string) => void;
   autopilotError: string | null;
   clearAutopilotError: () => void;
@@ -18,6 +20,7 @@ const CreditsContext = createContext<CreditsContextValue>({
   nodeCosts: {},
   isLoading: true,
   autopilotEnabled: false,
+  autopilotFailed: false,
   setAutopilotEnabled: () => {},
   autopilotError: null,
   clearAutopilotError: () => {},
@@ -28,25 +31,41 @@ export function CreditsProvider({ children, projectId }: { children: React.React
   const configs = useQuery(api.credits.getAllNodeCreditConfigs);
 
   const dxApi = api as any;
-  const dbAutopilot = useQuery(
-    projectId ? dxApi.autopilot.getProjectAutopilot : "skip",
+  const autopilotStatus = useQuery(
+    projectId ? dxApi.autopilot.getProjectAutopilotStatus : "skip",
     projectId ? { projectId: projectId as Id<"dreamXProjects"> } : undefined
   );
-  const setAutopilotMutation = useMutation(dxApi.autopilot.setAutopilot);
+  const enableAutopilotMutation = useMutation(dxApi.autopilot.enableAutopilot);
+  const disableAutopilotMutation = useMutation(dxApi.autopilot.disableAutopilot);
 
   const [autopilotLocalOverride, setAutopilotLocalOverride] = useState<boolean | null>(null);
   const [autopilotError, setAutopilotError] = useState<string | null>(null);
 
-  // DB 值变化后清除乐观更新
+  const prevFailedRef = useRef<boolean>(false);
+
   useEffect(() => {
-    if (dbAutopilot !== undefined) {
+    if (autopilotStatus) {
+      const currentFailed = autopilotStatus.failed;
+      if (currentFailed && !prevFailedRef.current) {
+        toast.error("AI托管失败", {
+          description: "托管过程中遇到错误，请检查项目状态后重试",
+        });
+      }
+      prevFailedRef.current = currentFailed;
+    }
+  }, [autopilotStatus]);
+
+  useEffect(() => {
+    if (autopilotStatus !== undefined) {
       setAutopilotLocalOverride(null);
     }
-  }, [dbAutopilot]);
+  }, [autopilotStatus]);
 
   const autopilotEnabled = autopilotLocalOverride !== null
     ? autopilotLocalOverride
-    : (dbAutopilot === true);
+    : (autopilotStatus?.enabled ?? false);
+
+  const autopilotFailed = autopilotStatus?.failed ?? false;
 
   const DEFAULT_NODE_COSTS: Record<string, number> = {
     mediaUpload: 2,
@@ -68,7 +87,7 @@ export function CreditsProvider({ children, projectId }: { children: React.React
 
   const isLoading = balanceData === undefined || configs === undefined;
 
-  const setAutopilotEnabled = (enabled: boolean, error?: string) => {
+  const setAutopilotEnabled = async (enabled: boolean, error?: string) => {
     setAutopilotLocalOverride(enabled);
     if (!enabled && error) {
       setAutopilotError(error);
@@ -77,9 +96,16 @@ export function CreditsProvider({ children, projectId }: { children: React.React
       setAutopilotError(null);
     }
     if (projectId) {
-      setAutopilotMutation({ projectId: projectId as Id<"dreamXProjects">, enabled }).catch(() => {
+      try {
+        if (enabled) {
+          await enableAutopilotMutation({ projectId: projectId as Id<"dreamXProjects"> });
+        } else {
+          await disableAutopilotMutation({ projectId: projectId as Id<"dreamXProjects"> });
+        }
+      } catch (e: any) {
         setAutopilotLocalOverride(null);
-      });
+        toast.error(e?.message ?? "托管操作失败");
+      }
     }
   };
 
@@ -92,6 +118,7 @@ export function CreditsProvider({ children, projectId }: { children: React.React
         nodeCosts,
         isLoading,
         autopilotEnabled,
+        autopilotFailed,
         setAutopilotEnabled,
         autopilotError,
         clearAutopilotError,
