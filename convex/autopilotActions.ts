@@ -542,8 +542,7 @@ async function handleTtsSelection(ctx: any, projectId: any, jobId: any, ns: any,
 // ─── Handler: capcutBuild ────────────────────────────────────────────────────
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-async function handleCapcutBuild(ctx: any, projectId: any, jobId: any, nodeIndex: number, confirmedNodeIndices: number[]) {
-  // capcutBuild status === "idle" means ttsSelection is completed and capcutBuild is unlocked
+async function handleCapcutBuild(ctx: any, projectId: any, jobId: any, _ns: any, nodeIndex: number, confirmedNodeIndices: number[]) {
   await ctx.runAction(api.capcutBuilder.buildCapcutProject, { projectId });
 
   // Mark as confirmed and advance

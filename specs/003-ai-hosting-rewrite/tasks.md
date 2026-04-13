@@ -122,9 +122,9 @@
 
 **Purpose**: 清理旧代码，确保类型通过，整体验收
 
-- [ ] T028 [P] 删除或清理 `convex/autopilot.ts` 中不再使用的旧 `setAutopilot`、旧 `getProjectAutopilot` 等过时接口（若存在），确保无遗留引用
-- [ ] T029 运行 `npm run typecheck`，修复所有类型错误
-- [ ] T030 按照 `specs/003-ai-hosting-rewrite/quickstart.md` 测试流程，逐一验证 US1~US4 的 Independent Test 场景
+- [x] T028 [P] 删除或清理 `convex/autopilot.ts` 中不再使用的旧 `setAutopilot`、旧 `getProjectAutopilot` 等过时接口（若存在），确保无遗留引用
+- [x] T029 运行 `npm run typecheck`，修复所有类型错误
+- [x] T30 按照 `specs/003-ai-hosting-rewrite/quickstart.md` 测试流程，逐一验证 US1~US4 的 Independent Test 场景
 
 ---
 
