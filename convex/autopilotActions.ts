@@ -182,7 +182,7 @@ export const runAutopilotStep = internalAction({
         } else if (currentNode === "ttsSelection") {
           await handleTtsSelection(ctx, projectId, jobId, ns, currentNodeIndex, confirmedNodeIndices);
         } else if (currentNode === "capcutBuild") {
-          await handleCapcutBuild(ctx, projectId, jobId, currentNodeIndex, confirmedNodeIndices);
+          await handleCapcutBuild(ctx, projectId, jobId, ns, currentNodeIndex, confirmedNodeIndices);
         } else if (currentNode === "bgmRecall") {
           await handleBgmRecall(ctx, projectId, jobId, ns, currentNodeIndex, confirmedNodeIndices);
         }
