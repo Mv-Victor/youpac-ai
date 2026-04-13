@@ -54,7 +54,7 @@
 - [x] T012 [US1] 在 `convex/autopilotActions.ts` 的 `runAutopilotStep` 中实现 `handleMemeRecall` handler（检查 memeRecall status === idle，调用 `_completeMemeRecall` internalMutation）
 - [x] T013 [US1] 在 `convex/autopilotActions.ts` 的 `runAutopilotStep` 中实现 `handleBgmRecall` handler（检查 bgmRecall status === idle，随机选取一个 BGM，调用 bgmRecall 确认 mutation，同步触发 storyboard 生成）
 - [x] T014 [US1] 在 `convex/autopilotActions.ts` 的 `runAutopilotStep` 中实现 `handleStoryboard` handler（storyboard 由 bgmRecall 确认时已触发，此处检测 status：completed→推进，generating→重试，error→markFailed）
-- [ ] T015 [US1] 在 `convex/autopilotActions.ts` 的 `runAutopilotStep` 中实现 `handleTtsSelection` handler（检查 ttsSelection status === idle，调用生成配音 mutation）
+- [x] T015 [US1] 在 `convex/autopilotActions.ts` 的 `runAutopilotStep` 中实现 `handleTtsSelection` handler（检查 ttsSelection status === idle，调用生成配音 mutation）
 - [ ] T016 [US1] 在 `convex/autopilotActions.ts` 的 `runAutopilotStep` 中实现 `handleCapcutBuild` handler（检查 capcutBuild status === idle，调用生成 CapCut 工程 mutation）
 - [ ] T017 [US1] 在 `convex/autopilotActions.ts` 验证 PIPELINE 常量定义（`["mediaUpload","memeRecall","bgmRecall","storyboard","ttsSelection","capcutBuild"]`）及各 handler 的 confirmedNodeIndices 幂等检查（追加前检查索引是否已存在）
 
