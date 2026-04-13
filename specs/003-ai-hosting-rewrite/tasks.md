@@ -70,7 +70,7 @@
 
 ### Implementation for User Story 2
 
-- [ ] T018 [P] [US2] 修改 `app/routes/dashboard/index.tsx`：订阅 `api.autopilot.getAutopilotProjects` query，在项目卡片上根据 `failed` 字段展示三态 badge（`enabled=true`→\"托管中\"；`failed=true`→\"失败\"；否则不显示 badge），三种状态使用视觉可区分样式
+- [x] T018 [P] [US2] 修改 `app/routes/dashboard/index.tsx`：订阅 `api.autopilot.getAutopilotProjects` query，在项目卡片上根据 `failed` 字段展示三态 badge（`enabled=true`→"托管中"；`failed=true`→"失败"；否则不显示 badge），三种状态使用视觉可区分样式
 
 **Checkpoint**: Dashboard 正确显示托管中/失败/普通三态，与后端状态100%一致
 

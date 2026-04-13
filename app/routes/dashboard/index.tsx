@@ -209,7 +209,9 @@ export default function Page() {
             const ns = project.nodeStates;
             const NODES = ["mediaUpload", "memeRecall", "bgmRecall", "storyboard", "ttsSelection", "capcutBuild"];
             const completed = NODES.filter((k) => ns[k]?.status === "completed").length;
-            const isAutopilot = (autopilotProjects ?? []).some((p: any) => p.projectId === project._id);
+            const autopilotInfo = (autopilotProjects ?? []).find((p: any) => p.projectId === project._id);
+            const isAutopilotEnabled = autopilotInfo && !autopilotInfo.failed;
+            const isAutopilotFailed = autopilotInfo && autopilotInfo.failed;
 
             return (
               <Card
@@ -227,10 +229,16 @@ export default function Page() {
                           <CardTitle className="line-clamp-1 text-base">
                             {project.title}
                           </CardTitle>
-                          {isAutopilot && (
+                          {isAutopilotEnabled && (
                             <span className="inline-flex items-center gap-0.5 text-[10px] font-medium px-1.5 py-0.5 rounded bg-violet-500/15 text-violet-600 border border-violet-500/20 flex-shrink-0">
                               <Sparkles className="h-2.5 w-2.5 animate-pulse" />
                               托管中
+                            </span>
+                          )}
+                          {isAutopilotFailed && (
+                            <span className="inline-flex items-center gap-0.5 text-[10px] font-medium px-1.5 py-0.5 rounded bg-red-500/15 text-red-600 border border-red-500/20 flex-shrink-0">
+                              <Sparkles className="h-2.5 w-2.5" />
+                              失败
                             </span>
                           )}
                         </div>
