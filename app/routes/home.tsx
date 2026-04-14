@@ -6,11 +6,11 @@ import HeroSection from "~/components/homepage/hero-section";
 import type { Route } from "./+types/home";
 
 export function meta({ }: Route.MetaArgs) {
-  const title = "YouTube AI Assistant - Streamline Your Video Content Creation";
+  const title = "DreamX - AI营销视频自动化生成平台";
   const description =
-    "AI-powered assistant for YouTube creators. Generate optimized titles, descriptions, thumbnails, and social media posts for your videos using advanced AI technology.";
-  const keywords = "YouTube, AI Assistant, Content Creation, Video Optimization, AI Thumbnails, OpenAI, GPT-4, Video Transcription, Content Generator";
-  const siteUrl = "https://youtube-ai-assistant.com/";
+    "AI驱动的营销视频自动化生成系统。通过智能素材分析、表情包召回、BGM匹配、TTS语音生成、分镜脚本和成片导出，一键完成营销视频制作。";
+  const keywords = "DreamX, AI视频, 营销视频, 自动化生成, 表情包, BGM, TTS, 分镜, 剪映, AI营销";
+  const siteUrl = "https://dreamx.ai/";
   const imageUrl =
     "https://jdj14ctwppwprnqu.public.blob.vercel-storage.com/youtube-ai-assistant-og.png";
 
