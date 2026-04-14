@@ -225,28 +225,21 @@ function InnerDreamXCanvas({
               fileName: img.fileName,
             }));
             const allImages = [...prevImages, ...imageData];
-            // 先保存图片（状态 generating，等分析完成）
+            // 先保存图片（状态 generating）
             await updateNodeState({ id: projectId, nodeKey: "mediaUpload", patch: { images: allImages, eventDescription: description, status: "generating" } });
             toast.success("素材上传完成！正在 AI 分析素材...");
             setAnalysisStatus("generating");
             setAnalysisProgress({ stage: "正在分析素材内容...", percent: 30 });
-            // 触发分析
+            // 触发分析（后端会自动更新状态）
             try {
               const analysis = await analyzeMediaBatch({ imageUrls: allImages.map((i) => i.url), eventDescription: description || undefined, projectId });
+              // 后端已自动保存结果，这里只更新本地UI状态
               setAnalysisProgress({ stage: "分析完成", percent: 100 });
               setAnalysisStatus("ready");
-              // 保存分析结果（不 complete，等用户确认）
-              await updateNodeState({ id: projectId, nodeKey: "mediaUpload", patch: {
-                images: allImages,
-                eventDescription: description,
-                aiAnalysis: analysis,
-                emotionTags: extractEmotionTags(analysis),
-                status: "idle",
-              }});
               toast.success("分析完成！请确认分析结果后继续");
             } catch (e) {
               setAnalysisStatus("error");
-              await updateNodeState({ id: projectId, nodeKey: "mediaUpload", patch: { images: allImages, eventDescription: description, status: "idle" } });
+              // 错误状态也由后端更新，这里只是本地UI
               toast.error(`AI 分析失败：${toUserMessage(e)}`);
             }
           } catch (e) {
@@ -262,17 +255,13 @@ function InnerDreamXCanvas({
           await updateNodeState({ id: projectId, nodeKey: "mediaUpload", patch: { status: "generating" } });
           try {
             const analysis = await analyzeMediaBatch({ imageUrls: images.map((i: any) => i.url), eventDescription: ns.mediaUpload?.eventDescription || undefined, projectId });
+            // 后端已自动保存结果，这里只更新本地UI
             setAnalysisProgress({ stage: "分析完成", percent: 100 });
             setAnalysisStatus("ready");
-            await updateNodeState({ id: projectId, nodeKey: "mediaUpload", patch: {
-              aiAnalysis: analysis,
-              emotionTags: extractEmotionTags(analysis),
-              status: "idle",
-            }});
             toast.success("重新分析完成！");
           } catch (e) {
             setAnalysisStatus("error");
-            await updateNodeState({ id: projectId, nodeKey: "mediaUpload", patch: { status: "idle" } });
+            // 错误状态也由后端更新，这里只是本地UI
             toast.error(`重新分析失败：${toUserMessage(e)}`);
           }
         };

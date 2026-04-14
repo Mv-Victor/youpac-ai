@@ -48,6 +48,7 @@ const MemeRecallNode = memo(({ data }: MemeRecallNodeInnerProps) => {
   }, [autopilotEnabled, status, data.suggestedMemes]);
 
   // 当 suggestedMemes 变化（首次加载或重新召回）时，调用 AI 分析默认插入位置
+  // 但在 autopilot 模式下不触发，避免与后端重复执行
   const suggestCalledRef = useRef(false);
   const prevSuggestedMemesKeyRef = useRef<string>("");
   useEffect(() => {
@@ -74,6 +75,11 @@ const MemeRecallNode = memo(({ data }: MemeRecallNodeInnerProps) => {
           })
           .filter(Boolean) as Array<{ meme: MemeItem; insertAfterImageIndex: number }>
       );
+      return;
+    }
+
+    // ✅ Autopilot模式下不触发前端AI分析，完全由后端控制
+    if (autopilotEnabled) {
       return;
     }
 
@@ -107,7 +113,7 @@ const MemeRecallNode = memo(({ data }: MemeRecallNodeInnerProps) => {
       }).finally(() => setIsSuggesting(false));
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [data.suggestedMemes, data.selectedMemes, status]);
+  }, [data.suggestedMemes, data.selectedMemes, status, autopilotEnabled]);
 
   const toggleMeme = (meme: MemeItem) => {
     setSelections((prev) => {

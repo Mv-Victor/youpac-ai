@@ -147,24 +147,28 @@ export const runAutopilotStep = internalAction({
     }
 
     // 6. Retry count exceeded → mark failed (timeout)
-    if (job.retryCount >= 30) {
+    // MediaUpload AI analysis can take up to 120s, so allow 60 retries (180s total)
+    const maxRetries = currentNode === "mediaUpload" ? 60 : 30;
+    if (job.retryCount >= maxRetries) {
       await ctx.runMutation(internal.autopilot._markFailed, {
         projectId,
-        reason: `Timeout waiting for node ${currentNode} after 30 retries`,
+        reason: `Timeout waiting for node ${currentNode} after ${maxRetries} retries`,
       });
       return;
     }
 
-    // 7. Node still generating → increment retryCount and schedule 10s retry
+    // 7. Node still generating → increment retryCount and schedule retry
     if (nodeStatus === "generating") {
       await ctx.runMutation(internal.autopilot._updateJob, {
         jobId,
         patch: { retryCount: job.retryCount + 1 },
       });
+      // Use shorter retry interval (3s) for mediaUpload to reduce perceived latency
+      const retryDelay = 10000;
       await ctx.runMutation(internal.autopilot._scheduleNextStep, {
         projectId,
         jobId,
-        delayMs: 10000,
+        delayMs: retryDelay,
       });
       return;
     }
@@ -227,15 +231,15 @@ export const runAutopilotStep = internalAction({
 async function handleMediaUpload(ctx: any, projectId: any, jobId: any, ns: any, nodeIndex: number, confirmedNodeIndices: number[]) {
   const images: any[] = ns.mediaUpload?.images ?? [];
 
-  // Ready condition: images non-empty AND all aiDescriptions present
+  // Ready condition: images non-empty AND aiAnalysis exists (batch analysis complete)
   // If not ready, return without scheduling — the outer step 9 will schedule a 3s retry
   if (images.length === 0) {
     // No images yet: just return and let the outer loop retry
     return;
   }
 
-  const allDescribed = images.every((img: any) => img.aiDescription && img.aiDescription.trim().length > 0);
-  if (!allDescribed) {
+  const aiAnalysis = ns.mediaUpload?.aiAnalysis;
+  if (!aiAnalysis || aiAnalysis.trim().length === 0) {
     // AI analysis not yet complete: increment retryCount and let outer loop schedule retry
     const currentJob = await ctx.runQuery(internal.autopilot._getJob, { jobId });
     if (currentJob) {
@@ -247,7 +251,7 @@ async function handleMediaUpload(ctx: any, projectId: any, jobId: any, ns: any, 
     return;
   }
 
-  // All images have AI descriptions: confirm mediaUpload by marking node as completed in project
+  // AI analysis complete: confirm mediaUpload by marking node as completed in project
   await ctx.runMutation(internal.dreamXCanvas._updateNodeState, {
     id: projectId,
     nodeKey: "mediaUpload",

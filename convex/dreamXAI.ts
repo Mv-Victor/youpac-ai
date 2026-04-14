@@ -135,8 +135,40 @@ ${imageContent.map((_, i) => `图${i + 1}：[简短描述，不超过20字]`).jo
           `3. 分批上传处理`
         );
       } else {
+        // 分析失败，更新错误状态
+        if (args.projectId) {
+          await (ctx.runMutation as any)("dreamXCanvas:_updateNodeState", {
+            id: args.projectId,
+            nodeKey: "mediaUpload",
+            patch: {
+              status: "error",
+              errorMessage: err.message || "AI分析失败",
+            },
+          });
+        }
         throw new Error(`图片分析失败：${err.message || "未知错误"}`);
       }
+    }
+
+    // 自动保存分析结果到数据库（如果提供了projectId）
+    if (args.projectId) {
+      // 提取情绪标签
+      const emotionTagMatch = text.match(/【情绪标签】\s*([^\n]+)/);
+      const emotionTags = emotionTagMatch 
+        ? emotionTagMatch[1].split(/[\/,，、\s]+/).filter(Boolean).slice(0, 4)
+        : ["日常"];
+
+      await (ctx.runMutation as any)("dreamXCanvas:_updateNodeState", {
+        id: args.projectId,
+        nodeKey: "mediaUpload",
+        patch: {
+          status: "idle", // 分析完成，等待用户确认
+          aiAnalysis: text,
+          emotionTags,
+        },
+      });
+
+      console.log("[analyzeMediaBatch] Analysis saved to database, emotion tags:", emotionTags);
     }
 
     if (userId) {
