@@ -34,24 +34,33 @@ export function AutopilotSwitch({ hasMedia }: { hasMedia?: boolean }) {
         <Tooltip>
           <TooltipTrigger asChild>
             <Button
-              variant={autopilotEnabled ? "default" : "outline"}
+              variant={autopilotEnabled ? "destructive" : "outline"}
               size="sm"
               className="gap-1.5 text-xs h-8"
-              disabled={autopilotEnabled}
               onClick={() => {
-                if (!hasMedia) {
-                  toast.error("请先上传素材图片，再开启 AI 托管模式");
-                  return;
+                if (autopilotEnabled) {
+                  // 关闭托管
+                  setAutopilotEnabled(false);
+                  toast.success("已关闭 AI 托管");
+                } else {
+                  // 开启托管
+                  if (!hasMedia) {
+                    toast.error("请先上传素材图片，再开启 AI 托管模式");
+                    return;
+                  }
+                  setAutopilotEnabled(true);
                 }
-                setAutopilotEnabled(true);
               }}
             >
               <Bot className="h-3.5 w-3.5" />
-              AI 托管
+              {autopilotEnabled ? "关闭托管" : "AI 托管"}
             </Button>
           </TooltipTrigger>
           <TooltipContent side="bottom" className="max-w-56 text-xs leading-relaxed">
-            开启后自动完成每个节点的默认操作：自动确认素材分析、自动选择表情包、自动选择 BGM、自动生成配音。遇到积分不足或错误时自动暂停。
+            {autopilotEnabled
+              ? "点击关闭 AI 托管，当前正在执行的操作会完成，但不会继续推进后续节点"
+              : "开启后自动完成每个节点的默认操作：自动确认素材分析、自动选择表情包、自动选择 BGM、自动生成配音。遇到积分不足或错误时自动暂停。"
+            }
           </TooltipContent>
         </Tooltip>
       </TooltipProvider>

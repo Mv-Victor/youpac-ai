@@ -25,7 +25,7 @@ export const getMyBalance = query({
   args: {},
   handler: async (ctx) => {
     const identity = await ctx.auth.getUserIdentity();
-    if (!identity) throw new ConvexError("UNAUTHORIZED");
+    if (!identity) return null;  // Return null instead of throwing error
     const userId = identity.subject;
     const account = await ctx.db
       .query("userCredits")

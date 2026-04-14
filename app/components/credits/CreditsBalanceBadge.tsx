@@ -5,7 +5,7 @@ import { Coins } from "lucide-react";
 export function CreditsBalanceBadge() {
   const balance = useQuery(api.credits.getMyBalance);
 
-  if (balance === undefined) {
+  if (balance === undefined || balance === null) {
     return (
       <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
         <Coins className="h-3 w-3" />

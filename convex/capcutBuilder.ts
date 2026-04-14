@@ -240,7 +240,7 @@ export const buildCapcutProject = action({
 
     // Use string-based function references to avoid circular api type inference
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const project = await (ctx.runQuery as any)("dreamXCanvas:getProject", {
+    const project = await (ctx.runQuery as any)("dreamXCanvas:_getProject", {
       id: args.projectId,
     });
     if (!project) throw new Error("Project not found");

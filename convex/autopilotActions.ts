@@ -65,14 +65,27 @@ export const runAutopilotStep = internalAction({
   handler: async (ctx, args) => {
     const { projectId, jobId } = args;
 
+    console.log("[Autopilot] runAutopilotStep START - projectId:", projectId, "jobId:", jobId);
+
     // 1. Read project and job
-    const project = await ctx.runQuery(api.dreamXCanvas.getProject, { id: projectId });
-    if (!project) return;
-    if (!(project as any).autopilotEnabled) return;
+    const project = await ctx.runQuery(internal.dreamXCanvas._getProject, { id: projectId });
+    if (!project) {
+      console.log("[Autopilot] Project not found, exiting");
+      return;
+    }
+    if (!(project as any).autopilotEnabled) {
+      console.log("[Autopilot] Autopilot disabled, exiting");
+      return;
+    }
 
     // Fetch the autopilot job via a dedicated internal query
     const job = await ctx.runQuery(internal.autopilot._getJob, { jobId });
-    if (!job) return;
+    if (!job) {
+      console.log("[Autopilot] Job not found, exiting");
+      return;
+    }
+    
+    console.log("[Autopilot] Job state - currentNodeIndex:", job.currentNodeIndex, "retryCount:", job.retryCount);
 
     // 2. Clear pendingScheduledJobId — prevent double-cancel
     await ctx.runMutation(internal.autopilot._updateJob, {
@@ -94,9 +107,12 @@ export const runAutopilotStep = internalAction({
         break;
       }
     }
+    
+    console.log("[Autopilot] Current node:", currentNode, "index:", currentNodeIndex, "status:", currentNode ? ns[currentNode]?.status : "N/A");
 
     // 4. All nodes completed → stop autopilot (success)
     if (currentNode === null || currentNodeIndex === null) {
+      console.log("[Autopilot] All nodes completed, stopping autopilot");
       await ctx.runMutation(internal.autopilot._stopAutopilot, { projectId });
       return;
     }
@@ -254,25 +270,34 @@ async function handleMediaUpload(ctx: any, projectId: any, jobId: any, ns: any, 
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function handleMemeRecall(ctx: any, projectId: any, jobId: any, ns: any, nodeIndex: number, confirmedNodeIndices: number[]) {
+  console.log("[Autopilot][MemeRecall] START - nodeIndex:", nodeIndex);
+  
   // memeRecall status === "idle" means AI analysis is complete; confirm it
   const emotionTags: string[] = ns.copywriting?.emotionTags ?? ns.mediaUpload?.emotionTags ?? [];
   const imageUrls: string[] = (ns.mediaUpload?.images ?? []).map((i: any) => i.url);
+  
+  console.log("[Autopilot][MemeRecall] emotionTags:", emotionTags);
+  console.log("[Autopilot][MemeRecall] imageUrls count:", imageUrls.length);
 
   const suggestedMemes = await ctx.runQuery(api.dreamXMedia.getSuggestedMemes, {
     emotionTags,
     limit: 6,
     shuffleSeed: 0,
   });
+  
+  console.log("[Autopilot][MemeRecall] suggestedMemes count:", suggestedMemes?.length ?? 0);
 
   const memes: Array<{ url: string; name: string; mood: string; insertAfterImageIndex: number }> = [];
 
   if (suggestedMemes && suggestedMemes.length > 0 && imageUrls.length > 0) {
     try {
+      console.log("[Autopilot][MemeRecall] Calling AI suggestMemeInsertions...");
       const suggestions = await ctx.runAction(api.dreamXAI.suggestMemeInsertions, {
         imageUrls,
         memes: suggestedMemes.slice(0, 6).map((m: any) => ({ url: m.url, name: m.name, mood: m.mood })),
         projectId,
       });
+      console.log("[Autopilot][MemeRecall] AI suggestions received:", suggestions?.length ?? 0);
       if (suggestions && suggestions.length > 0) {
         for (const s of suggestions) {
           const meme = suggestedMemes.find((m: any) => m.url === s.memeUrl);
@@ -281,21 +306,27 @@ async function handleMemeRecall(ctx: any, projectId: any, jobId: any, ns: any, n
           }
         }
       }
-    } catch {
+    } catch (e: any) {
+      console.error("[Autopilot][MemeRecall] AI analysis failed, using fallback:", e?.message);
       suggestedMemes.slice(0, 3).forEach((m: any, i: number) => {
         memes.push({ url: m.url, name: m.name, mood: m.mood, insertAfterImageIndex: i });
       });
     }
   } else if (suggestedMemes && suggestedMemes.length > 0) {
+    console.log("[Autopilot][MemeRecall] No images, using default meme positions");
     suggestedMemes.slice(0, 3).forEach((m: any, i: number) => {
       memes.push({ url: m.url, name: m.name, mood: m.mood, insertAfterImageIndex: i });
     });
   }
+  
+  console.log("[Autopilot][MemeRecall] Final memes count:", memes.length);
 
   await ctx.runMutation(internal.dreamXCanvas._completeMemeRecall, {
     id: projectId,
     selectedMemes: memes,
   });
+  
+  console.log("[Autopilot][MemeRecall] _completeMemeRecall done, marking as confirmed");
 
   // Mark as confirmed and advance
   const updatedConfirmed = [...confirmedNodeIndices, nodeIndex];
@@ -307,6 +338,8 @@ async function handleMemeRecall(ctx: any, projectId: any, jobId: any, ns: any, n
       retryCount: 0,
     },
   });
+  
+  console.log("[Autopilot][MemeRecall] COMPLETE - advancing to next node");
 }
 
 // ─── Handler: bgmRecall ───────────────────────────────────────────────────────
@@ -430,7 +463,7 @@ async function handleStoryboard(ctx: any, projectId: any, jobId: any, ns: any, n
   });
 
   // After the blocking generateStoryboard call, re-read the updated project to get final status
-  const updatedProject = await ctx.runQuery(api.dreamXCanvas.getProject, { id: projectId });
+  const updatedProject = await ctx.runQuery(internal.dreamXCanvas._getProject, { id: projectId });
   const updatedStoryboardStatus = (updatedProject as any)?.nodeStates?.storyboard?.status;
 
   if (updatedStoryboardStatus === "completed") {

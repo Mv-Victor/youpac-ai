@@ -104,7 +104,7 @@ export default function CreditsPage() {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              {balance === undefined ? (
+              {balance === undefined || balance === null ? (
                 <div className="h-10 w-24 bg-muted animate-pulse rounded" />
               ) : (
                 <div className="text-4xl font-bold text-primary">{balance.balance}</div>
@@ -118,7 +118,7 @@ export default function CreditsPage() {
               <CardTitle className="text-sm font-medium text-muted-foreground">累计兑换</CardTitle>
             </CardHeader>
             <CardContent>
-              {balance === undefined ? (
+              {balance === undefined || balance === null ? (
                 <div className="h-8 w-16 bg-muted animate-pulse rounded" />
               ) : (
                 <div className="text-2xl font-semibold text-green-500">{balance.totalRedeemed}</div>
@@ -132,7 +132,7 @@ export default function CreditsPage() {
               <CardTitle className="text-sm font-medium text-muted-foreground">累计消耗</CardTitle>
             </CardHeader>
             <CardContent>
-              {balance === undefined ? (
+              {balance === undefined || balance === null ? (
                 <div className="h-8 w-16 bg-muted animate-pulse rounded" />
               ) : (
                 <div className="text-2xl font-semibold text-red-400">{balance.totalConsumed}</div>

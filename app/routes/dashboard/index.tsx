@@ -96,7 +96,7 @@ export default function Page() {
           <DialogTrigger asChild>
             <Button
               variant="outline"
-              className="gap-2 border-rose-500/30 hover:border-rose-500/60 hover:bg-rose-500/10 hover:shadow-md transition-all"
+              className="gap-2 border-rose-500/30 text-rose-600 hover:border-rose-500/60 hover:bg-rose-500/10 hover:text-rose-700 hover:shadow-md transition-all"
             >
               <Plus className="h-4 w-4 text-rose-500" />
               新建 DreamX 项目

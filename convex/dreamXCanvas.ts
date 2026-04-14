@@ -1,5 +1,5 @@
 import { v } from "convex/values";
-import { action, mutation, query, internalMutation } from "./_generated/server";
+import { action, mutation, query, internalMutation, internalQuery } from "./_generated/server";
 import { internal } from "./_generated/api";
 
 // Pipeline 新顺序：mediaUpload → memeRecall → bgmRecall → storyboard → ttsSelection → capcutBuild
@@ -38,6 +38,14 @@ export const getProject = query({
     const project = await ctx.db.get(args.id);
     if (!project || project.userId !== identity.subject) return null;
     return project;
+  },
+});
+
+// Internal version of getProject (no auth required, for use by autopilot)
+export const _getProject = internalQuery({
+  args: { id: v.id("dreamXProjects") },
+  handler: async (ctx, args) => {
+    return await ctx.db.get(args.id);
   },
 });
 

@@ -1,9 +1,10 @@
 import { useState, useRef } from "react";
-import { IconDashboard } from "@tabler/icons-react";
+import { IconDashboard, IconLogout } from "@tabler/icons-react";
 import { Twitter, MessageCircle, Coins } from "lucide-react";
 import { Link } from "react-router";
 import { NavMain } from "./nav-main";
 import { NavUser } from "./nav-user";
+import { useClerk } from "@clerk/react-router";
 import {
   Sidebar,
   SidebarContent,
@@ -43,6 +44,7 @@ export function AppSidebar({
   const [showWechat, setShowWechat] = useState(false);
   const [popupPos, setPopupPos] = useState({ top: 0, left: 0 });
   const wechatRef = useRef<HTMLDivElement>(null);
+  const { signOut } = useClerk();
 
   const handleWechatEnter = () => {
     if (wechatRef.current) {
@@ -110,7 +112,24 @@ export function AppSidebar({
         </SidebarGroup>
       </SidebarContent>
 
-      <SidebarFooter>{user && <NavUser user={user} />}</SidebarFooter>
+      <SidebarFooter>
+        {user && (
+          <div className="space-y-1">
+            <NavUser user={user} />
+            <SidebarMenu>
+              <SidebarMenuItem>
+                <SidebarMenuButton
+                  onClick={() => signOut({ redirectUrl: "/" })}
+                  className="w-full text-destructive hover:text-destructive hover:bg-destructive/10"
+                >
+                  <IconLogout className="h-4 w-4" />
+                  <span>Logout</span>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            </SidebarMenu>
+          </div>
+        )}
+      </SidebarFooter>
 
       {/* WeChat popup — fixed 定位渲染在 Sidebar 根节点，不受父容器 overflow 影响 */}
       {showWechat && (

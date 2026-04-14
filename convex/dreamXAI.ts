@@ -19,9 +19,16 @@ export const analyzeMediaBatch = action({
     const { imageUrls, eventDescription } = args;
     const identity = await ctx.auth.getUserIdentity();
 
-    if (identity) {
+    // Get project to obtain userId (autopilot has no identity)
+    let userId = identity?.subject;
+    if (!userId && args.projectId) {
+      const project = await (ctx.runQuery as any)("dreamXCanvas:_getProject", { id: args.projectId });
+      userId = project?.userId;
+    }
+
+    if (userId) {
       await (ctx.runMutation as any)(internal.credits.checkBalanceInternal, {
-        userId: identity.subject,
+        userId,
         nodeType: "mediaUpload",
         imageCount: imageUrls.length,
       });
@@ -132,9 +139,9 @@ ${imageContent.map((_, i) => `图${i + 1}：[简短描述，不超过20字]`).jo
       }
     }
 
-    if (identity) {
+    if (userId) {
       await (ctx.runMutation as any)(internal.credits.deductCreditsInternal, {
-        userId: identity.subject,
+        userId,
         nodeType: "mediaUpload",
         imageCount: imageUrls.length,
         projectId: args.projectId,
@@ -265,9 +272,13 @@ export const generateStoryboard = action({
     const { projectId, images, selectedMemes } = args;
     const identity = await ctx.auth.getUserIdentity();
 
-    if (identity) {
+    // Get project to obtain userId (autopilot has no identity)
+    const project = await (ctx.runQuery as any)("dreamXCanvas:_getProject", { id: projectId });
+    const userId = identity?.subject ?? project?.userId;
+
+    if (userId) {
       await (ctx.runMutation as any)(internal.credits.checkBalanceInternal, {
-        userId: identity.subject,
+        userId,
         nodeType: "storyboard",
         imageCount: images.length,
       });
@@ -392,7 +403,7 @@ ${memeListText}
         if (!Array.isArray(groups) || groups.length === 0) throw new Error("no groups");
       } catch {
         // Fallback: 用旧格式构建
-        return buildFallbackAndSave(ctx, projectId, images, selectedMemes, identity?.subject);
+        return buildFallbackAndSave(ctx, projectId, images, selectedMemes, userId);
       }
 
       // ─── 算法：将 group 结构展开为 flat timeline ───────────────────────────
@@ -496,9 +507,9 @@ ${memeListText}
         },
       });
 
-      if (identity) {
+      if (userId) {
         await (ctx.runMutation as any)(internal.credits.deductCreditsInternal, {
-          userId: identity.subject,
+          userId,
           nodeType: "storyboard",
           imageCount: images.length,
           projectId,
@@ -706,9 +717,13 @@ export const generateTTSPerSegment = action({
     const identity = await ctx.auth.getUserIdentity();
     const totalChars = segments.reduce((sum, s) => sum + s.text.length, 0);
 
-    if (identity) {
+    // Get project to obtain userId (autopilot has no identity)
+    const project = await (ctx.runQuery as any)("dreamXCanvas:_getProject", { id: projectId });
+    const userId = identity?.subject ?? project?.userId;
+
+    if (userId) {
       await (ctx.runMutation as any)(internal.credits.checkBalanceInternal, {
-        userId: identity.subject,
+        userId,
         nodeType: "ttsSelection",
         charCount: totalChars,
       });
@@ -829,11 +844,11 @@ export const generateTTSPerSegment = action({
       { projectId, voiceTracks: results }
     );
 
-    if (identity) {
+    if (userId) {
       const totalChars = segments.reduce((sum, s) => sum + s.text.length, 0);
       if (args.subtitlesChanged) {
         await (ctx.runMutation as any)(internal.credits.deductCreditsInternal, {
-          userId: identity.subject,
+          userId,
           nodeType: "storyboard",
           imageCount: args.imageCount ?? 0,
           projectId,
@@ -841,7 +856,7 @@ export const generateTTSPerSegment = action({
         });
       }
       await (ctx.runMutation as any)(internal.credits.deductCreditsInternal, {
-        userId: identity.subject,
+        userId,
         nodeType: "ttsSelection",
         charCount: totalChars,
         projectId,
