@@ -5,6 +5,7 @@ import { useEffect } from "react";
 import type { LoaderFunctionArgs } from "react-router";
 import { useLoaderData } from "react-router";
 import { SharedCanvas } from "~/components/canvas/SharedCanvas";
+import { getConvexServerUrl } from "~/lib/convex-server";
 
 export async function loader({ params }: LoaderFunctionArgs) {
   const shareId = params.shareId;
@@ -15,8 +16,7 @@ export async function loader({ params }: LoaderFunctionArgs) {
     throw new Response("Share ID not found", { status: 404 });
   }
 
-  // Hardcode the Convex URL for now
-  const convexUrl = "https://charming-bird-938.convex.cloud";
+  const convexUrl = getConvexServerUrl();
   
   const convex = new ConvexHttpClient(convexUrl);
   
