@@ -58,8 +58,6 @@ export async function loader(args: Route.LoaderArgs) {
     return {
       isSignedIn: !!userId,
       initialStats: null,
-      convexConfigurationError:
-        "VITE_CONVEX_URL is required for server-side Convex requests. Configure it before starting the app.",
     };
   }
   const convex = new ConvexHttpClient(convexUrl);

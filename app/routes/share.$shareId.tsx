@@ -5,7 +5,6 @@ import { useEffect } from "react";
 import type { LoaderFunctionArgs } from "react-router";
 import { useLoaderData } from "react-router";
 import { SharedCanvas } from "~/components/canvas/SharedCanvas";
-import { getConvexServerUrl } from "~/lib/convex-server";
 
 export async function loader({ params }: LoaderFunctionArgs) {
   const shareId = params.shareId;
@@ -16,7 +15,12 @@ export async function loader({ params }: LoaderFunctionArgs) {
     throw new Response("Share ID not found", { status: 404 });
   }
 
-  const convexUrl = getConvexServerUrl();
+  const convexUrl = process.env.VITE_CONVEX_URL?.trim();
+  if (!convexUrl) {
+    throw new Error(
+      "VITE_CONVEX_URL is required for server-side Convex requests. Configure it before starting the app.",
+    );
+  }
   
   const convex = new ConvexHttpClient(convexUrl);
   

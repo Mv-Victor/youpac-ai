@@ -45,6 +45,17 @@ try {
   const tests = readdirSync(join(root, "tests")).filter(name => name.endsWith(".test.mjs")).sort().map(name => join("tests", name));
   assert.ok(tests.length, "At least one regression test suite is required");
   run("node", ["--experimental-strip-types", "--test", ...tests], root);
+  const baseTests = new Set(run("git", ["ls-tree", "-r", "--name-only", baseRef, "tests"], root, { quiet: true }).stdout.trim().split("\n"));
+  const newTests = tests.filter(path => !baseTests.has(path));
+  if (newTests.length) {
+    for (const path of newTests) copyFileSync(join(root, path), join(base, path));
+    const reproduction = run("node", ["--experimental-strip-types", "--test", ...newTests], base, { allowFailure: true });
+    const output = (reproduction.stdout || "") + (reproduction.stderr || "");
+    assert.notEqual(reproduction.status, 0, "New regression tests must fail on the actual baseline");
+    assert.match(output, /ERR_ASSERTION/, "Baseline failure must reproduce an assertion, not missing candidate-only code");
+    assert.doesNotMatch(output, /ERR_MODULE_NOT_FOUND|ERR_UNKNOWN_FILE_EXTENSION|SyntaxError/, "Baseline reproduction cannot fail on test setup");
+    console.log(JSON.stringify({ baselineReproduction: "assertion_failure", suites: newTests }));
+  }
   run("npm", ["run", "build"], root);
 } finally {
   run("git", ["worktree", "remove", "--force", base], root, { allowFailure: true, quiet: true });

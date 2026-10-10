@@ -1,7 +1,7 @@
 name: Multica Lab
 on:
   push:
-    branches: [multica-lab, "multica/**"]
+    branches: [multica-lab]
   pull_request:
     branches: [multica-lab]
 permissions:
