@@ -1,0 +1,37 @@
+name: Multica Lab
+on:
+  push:
+    branches: [multica-lab, "multica/**"]
+  pull_request:
+    branches: [multica-lab]
+permissions:
+  contents: read
+concurrency:
+  group: multica-lab-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  acceptance:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 22.22.2
+          cache: npm
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Verify candidate against its baseline
+        env:
+          LOOP_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: node scripts/loop-check.mjs
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: youpac-${{ github.sha }}
+          path: |
+            build/
+            package.json
+            package-lock.json
+          retention-days: 7
