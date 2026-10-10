@@ -53,9 +53,12 @@ export async function loader(args: Route.LoaderArgs) {
   const { userId } = await getAuth(args);
   
   // Fetch initial stats from Convex
-  const convexUrl = process.env.VITE_CONVEX_URL;
+  const convexUrl = process.env.VITE_CONVEX_URL?.trim();
   if (!convexUrl) {
-    return { isSignedIn: !!userId, initialStats: null };
+    return {
+      isSignedIn: !!userId,
+      initialStats: null,
+    };
   }
   const convex = new ConvexHttpClient(convexUrl);
   
