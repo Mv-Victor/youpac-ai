@@ -55,7 +55,7 @@ export function parseVTT(content: string): ParsedTranscription {
     const line = lines[i].trim();
     
     if (line.includes('-->')) {
-      const timestampMatch = line.match(/(\d{2}:\d{2}:\d{2}\.\d{3})\s*-->\s*(\d{2}:\d{2}:\d{2}\.\d{3})/);
+      const timestampMatch = line.match(/^((?:\d{2,}:)?\d{2}:\d{2}\.\d{3})\s*-->\s*((?:\d{2,}:)?\d{2}:\d{2}\.\d{3})(?=\s|$)/);
       if (timestampMatch) {
         const start = vttTimeToSeconds(timestampMatch[1]);
         const end = vttTimeToSeconds(timestampMatch[2]);
@@ -233,7 +233,8 @@ function srtTimeToSeconds(time: string): number {
 }
 
 function vttTimeToSeconds(time: string): number {
-  const [hours, minutes, secondsMs] = time.split(':');
+  const parts = time.split(':');
+  const [hours, minutes, secondsMs] = parts.length === 2 ? ['0', ...parts] : parts;
   const [seconds, ms] = secondsMs.split('.');
   return parseInt(hours) * 3600 + parseInt(minutes) * 60 + parseInt(seconds) + parseInt(ms) / 1000;
 }
