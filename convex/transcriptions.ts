@@ -27,6 +27,18 @@ export const create = mutation({
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) throw new Error("Unauthorized");
     const userId = identity.subject;
+
+    const project = await ctx.db.get(args.projectId);
+    if (!project || project.userId !== userId) {
+      throw new Error("Project not found or unauthorized");
+    }
+
+    if (args.videoId) {
+      const video = await ctx.db.get(args.videoId);
+      if (!video || video.userId !== userId || video.projectId !== args.projectId) {
+        throw new Error("Video not found or unauthorized");
+      }
+    }
     
     console.log("[Convex] User ID:", userId);
 
