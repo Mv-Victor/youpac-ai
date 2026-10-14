@@ -510,6 +510,8 @@ export const generateUploadUrl = mutation({
 export const getStorageFileUrl = action({
   args: { storageId: v.string() },
   handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Unauthorized");
     return await ctx.storage.getUrl(args.storageId as any);
   },
 });
