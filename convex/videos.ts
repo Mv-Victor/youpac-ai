@@ -18,6 +18,11 @@ export const create = mutation({
     if (!identity) throw new Error("Unauthorized");
     const userId = identity.subject;
 
+    const project = await ctx.db.get(args.projectId);
+    if (!project || project.userId !== userId) {
+      throw new Error("Project not found or unauthorized");
+    }
+
     // If we have a storageId, get the URL from Convex storage
     let videoUrl = args.videoUrl;
     if (args.storageId) {
