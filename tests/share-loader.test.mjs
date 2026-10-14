@@ -45,29 +45,35 @@ async function invokeLoader({ env, queryResult = { share: { shareId: "share-123"
   };
 }
 
-test("share loader fails before creating a Convex client without configuration", async () => {
-  const calls = { clients: [], queries: [] };
-  const sandbox = {
-    exports: {},
-    process: { env: {} },
-    console: { log: () => {}, error: () => {} },
-    Response,
-    ConvexHttpClient: class {
-      constructor(url) {
-        calls.clients.push(url);
-      }
-    },
-    api: { shares: { getSharedCanvas: Symbol("getSharedCanvas") } },
-  };
-  runInNewContext(outputText, sandbox);
+for (const [configState, env] of [
+  ["absent", {}],
+  ["spaces-only", { VITE_CONVEX_URL: "   " }],
+  ["tabs-only", { VITE_CONVEX_URL: "\t\t" }],
+]) {
+  test(`share loader fails before creating a Convex client with ${configState} configuration`, async () => {
+    const calls = { clients: [], queries: [] };
+    const sandbox = {
+      exports: {},
+      process: { env },
+      console: { log: () => {}, error: () => {} },
+      Response,
+      ConvexHttpClient: class {
+        constructor(url) {
+          calls.clients.push(url);
+        }
+      },
+      api: { shares: { getSharedCanvas: Symbol("getSharedCanvas") } },
+    };
+    runInNewContext(outputText, sandbox);
 
-  await assert.rejects(
-    () => sandbox.exports.loader({ params: { shareId: "share-123" } }),
-    /VITE_CONVEX_URL is required for server-side Convex requests/,
-  );
-  assert.deepEqual(calls.clients, []);
-  assert.deepEqual(calls.queries, []);
-});
+    await assert.rejects(
+      () => sandbox.exports.loader({ params: { shareId: "share-123" } }),
+      /VITE_CONVEX_URL is required for server-side Convex requests/,
+    );
+    assert.deepEqual(calls.clients, []);
+    assert.deepEqual(calls.queries, []);
+  });
+}
 
 test("share loader queries the configured Convex deployment", async () => {
   const { calls, queryReference, result } = await invokeLoader({

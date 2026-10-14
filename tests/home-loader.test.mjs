@@ -48,8 +48,12 @@ async function invokeLoader({ userId, env, queryError }) {
 
 for (const userId of [null, "test-user"]) {
   const authState = userId ? "signed in" : "signed out";
-  for (const env of [{}, { VITE_CONVEX_URL: "" }]) {
-    const configState = "VITE_CONVEX_URL" in env ? "empty" : "absent";
+  for (const [configState, env] of [
+    ["absent", {}],
+    ["empty", { VITE_CONVEX_URL: "" }],
+    ["spaces-only", { VITE_CONVEX_URL: "   " }],
+    ["tabs-only", { VITE_CONVEX_URL: "\t\t" }],
+  ]) {
     test(`${authState}, ${configState} configuration skips Convex entirely`, async () => {
       const { result, calls } = await invokeLoader({ userId, env });
       assert.deepEqual(calls.clients, []);
@@ -59,10 +63,10 @@ for (const userId of [null, "test-user"]) {
     });
   }
 
-  test(`${authState}, explicit configuration returns queried stats`, async () => {
-    const env = { VITE_CONVEX_URL: "http://127.0.0.1:3210" };
+  test(`${authState}, padded explicit configuration returns queried stats`, async () => {
+    const env = { VITE_CONVEX_URL: " \thttp://127.0.0.1:3210\t " };
     const { result, calls, stats, queryReference } = await invokeLoader({ userId, env });
-    assert.deepEqual(calls.clients, [env.VITE_CONVEX_URL]);
+    assert.deepEqual(calls.clients, ["http://127.0.0.1:3210"]);
     assert.deepEqual(calls.queries, [[queryReference]]);
     assert.deepEqual(calls.errors, []);
     assert.equal(result.initialStats, stats);
