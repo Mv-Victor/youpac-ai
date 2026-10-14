@@ -53,6 +53,8 @@ export const refineContent = action({
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) throw new Error("Unauthorized");
 
+    await ctx.runQuery(api.agents.getById, { id: args.agentId });
+
     try {
       // Build the system prompt based on agent type
       const systemPrompt = getRefineSystemPrompt(args.agentType);
