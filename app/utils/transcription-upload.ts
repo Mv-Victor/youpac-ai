@@ -126,11 +126,14 @@ export function parseJSON(content: string): ParsedTranscription {
     let segments: TranscriptionSegment[] = [];
     
     if (Array.isArray(data)) {
-      segments = data.map(item => ({
-        start: item.start || item.startTime || 0,
-        end: item.end || item.endTime || (item.start || 0) + 5,
-        text: item.text || item.content || item.transcript || ''
-      }));
+      segments = data.map(item => {
+        const start = item.start || item.startTime || 0;
+        return {
+          start,
+          end: item.end || item.endTime || start + 5,
+          text: item.text || item.content || item.transcript || ''
+        };
+      });
     } else if (data.segments) {
       segments = parseJSON(JSON.stringify(data.segments)).segments;
     } else if (data.transcript) {
