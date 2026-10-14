@@ -15,6 +15,11 @@ export const scheduleTranscription = mutation({
   handler: async (ctx, args) => {
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) throw new Error("Unauthorized");
+
+    const video = await ctx.db.get(args.videoId);
+    if (!video || video.userId !== identity.subject) {
+      throw new Error("Video not found or unauthorized");
+    }
     
     console.log("Scheduling transcription for video:", args.videoId);
     
