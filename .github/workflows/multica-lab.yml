@@ -1,13 +1,13 @@
-name: Multica Lab
+name: 007 Lab
 on:
   push:
-    branches: [multica-lab]
+    branches: [007-lab]
   pull_request:
-    branches: [multica-lab]
+    branches: [007-lab]
 permissions:
   contents: read
 concurrency:
-  group: multica-lab-${{ github.ref }}
+  group: 007-lab-${{ github.ref }}
   cancel-in-progress: true
 jobs:
   acceptance:
@@ -16,6 +16,7 @@ jobs:
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           fetch-depth: 0
           persist-credentials: false
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
@@ -23,13 +24,24 @@ jobs:
           node-version: 22.22.2
           cache: npm
       - run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Resolve comparison baseline
+        id: baseline
+        env:
+          EVENT_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          if [[ ! "$EVENT_BASE_SHA" =~ ^[0-9a-f]{40}$ ]] || [[ "$EVENT_BASE_SHA" =~ ^0{40}$ ]]; then
+            git fetch --no-tags origin multica-lab:refs/remotes/origin/multica-lab
+            EVENT_BASE_SHA="$(git merge-base HEAD refs/remotes/origin/multica-lab)"
+          fi
+          git merge-base --is-ancestor "$EVENT_BASE_SHA" HEAD
+          echo "sha=$EVENT_BASE_SHA" >> "$GITHUB_OUTPUT"
       - name: Verify candidate against its baseline
         env:
-          LOOP_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+          LOOP_BASE_SHA: ${{ steps.baseline.outputs.sha }}
         run: node scripts/loop-check.mjs
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: youpac-${{ github.sha }}
+          name: youpac-${{ github.event.pull_request.head.sha || github.sha }}
           path: |
             build/
             package.json
