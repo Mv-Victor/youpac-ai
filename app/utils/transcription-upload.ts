@@ -130,7 +130,7 @@ export function parseJSON(content: string): ParsedTranscription {
         const start = item.start || item.startTime || 0;
         return {
           start,
-          end: item.end || item.endTime || start + 5,
+          end: item.end ?? item.endTime ?? start + 5,
           text: item.text || item.content || item.transcript || ''
         };
       });
