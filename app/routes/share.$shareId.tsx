@@ -24,18 +24,19 @@ export async function loader({ params }: LoaderFunctionArgs) {
   
   const convex = new ConvexHttpClient(convexUrl);
   
+  let sharedData;
   try {
-    const sharedData = await convex.query(api.shares.getSharedCanvas, { shareId });
-    
-    if (!sharedData) {
-      throw new Response("Shared canvas not found", { status: 404 });
-    }
-    
-    return { sharedData, shareId };
+    sharedData = await convex.query(api.shares.getSharedCanvas, { shareId });
   } catch (error) {
     console.error("Error loading shared canvas:", error);
     throw new Response("Failed to load shared canvas", { status: 500 });
   }
+
+  if (!sharedData) {
+    throw new Response("Shared canvas not found", { status: 404 });
+  }
+
+  return { sharedData, shareId };
 }
 
 export default function SharedCanvasPage() {
