@@ -2,6 +2,8 @@
 
 import { lookup } from "node:dns/promises";
 import { isIP } from "node:net";
+import { isNonPublicIp } from "is-private-ip";
+import { Agent, fetch as undiciFetch } from "undici";
 import { v } from "convex/values";
 import { action } from "./_generated/server";
 import { api } from "./_generated/api";
@@ -16,36 +18,13 @@ const ALLOWED_IMAGE_TYPES = new Set([
   "image/webp",
 ]);
 
-function isPublicIpAddress(address: string): boolean {
-  const version = isIP(address);
-  if (version === 4) {
-    const [a, b, c] = address.split(".").map(Number);
-    return !(
-      a === 0 || a === 10 || a === 127 || a >= 224 ||
-      (a === 100 && b >= 64 && b <= 127) ||
-      (a === 169 && b === 254) ||
-      (a === 172 && b >= 16 && b <= 31) ||
-      (a === 192 && b === 0 && c === 0) ||
-      (a === 192 && b === 0 && c === 2) ||
-      (a === 192 && b === 168) ||
-      (a === 198 && (b === 18 || b === 19)) ||
-      (a === 198 && b === 51 && c === 100) ||
-      (a === 203 && b === 0 && c === 113)
-    );
-  }
+type ResolvedImageUrl = {
+  url: URL;
+  address: string;
+  family: 4 | 6;
+};
 
-  if (version === 6) {
-    const normalized = address.toLowerCase();
-    // Only globally routable unicast space is accepted. IPv4-mapped addresses
-    // are deliberately rejected instead of maintaining two parsing paths.
-    return /^(2|3)[0-9a-f]{3}:/.test(normalized) &&
-      !normalized.startsWith("2001:db8:");
-  }
-
-  return false;
-}
-
-async function validatePublicImageUrl(rawUrl: string): Promise<URL> {
+async function validatePublicImageUrl(rawUrl: string): Promise<ResolvedImageUrl> {
   let url: URL;
   try {
     url = new URL(rawUrl);
@@ -65,14 +44,19 @@ async function validatePublicImageUrl(rawUrl: string): Promise<URL> {
   const addresses = isIP(hostname)
     ? [{ address: hostname }]
     : await lookup(hostname, { all: true, verbatim: true });
-  if (!addresses.length || addresses.some(({ address }) => !isPublicIpAddress(address))) {
+  if (!addresses.length || addresses.some(({ address }) => !isIP(address) || isNonPublicIp(address))) {
     throw new Error("Image URL must resolve only to public addresses");
   }
 
-  return url;
+  const selected = addresses[0];
+  return {
+    url,
+    address: selected.address,
+    family: isIP(selected.address) as 4 | 6,
+  };
 }
 
-async function readBoundedImage(response: Response): Promise<{ dataUrl: string; size: number; mimeType: string }> {
+async function readBoundedImage(response: Awaited<ReturnType<typeof undiciFetch>>): Promise<{ dataUrl: string; size: number; mimeType: string }> {
   const mimeType = (response.headers.get("content-type") || "").split(";", 1)[0].trim().toLowerCase();
   if (!ALLOWED_IMAGE_TYPES.has(mimeType)) throw new Error("Response is not a supported image");
 
@@ -103,17 +87,30 @@ async function readBoundedImage(response: Response): Promise<{ dataUrl: string; 
 }
 
 async function downloadPublicImage(rawUrl: string): Promise<{ dataUrl: string; size: number; mimeType: string }> {
-  let url = await validatePublicImageUrl(rawUrl);
+  let resolved = await validatePublicImageUrl(rawUrl);
   for (let redirects = 0; redirects <= MAX_REDIRECTS; redirects++) {
-    const response = await fetch(url, { redirect: "manual" });
-    if (response.status >= 300 && response.status < 400) {
-      const location = response.headers.get("location");
-      if (!location || redirects === MAX_REDIRECTS) throw new Error("Too many image redirects");
-      url = await validatePublicImageUrl(new URL(location, url).toString());
-      continue;
+    const dispatcher = new Agent({
+      connect: {
+        lookup: (_hostname, options, callback) => {
+          const result = { address: resolved.address, family: resolved.family };
+          callback(null, options.all ? [result] : result.address, options.all ? undefined : result.family);
+        },
+      },
+    });
+    try {
+      const response = await undiciFetch(resolved.url, { redirect: "manual", dispatcher });
+      if (response.status >= 300 && response.status < 400) {
+        const location = response.headers.get("location");
+        await response.body?.cancel();
+        if (!location || redirects === MAX_REDIRECTS) throw new Error("Too many image redirects");
+        resolved = await validatePublicImageUrl(new URL(location, resolved.url).toString());
+        continue;
+      }
+      if (!response.ok) throw new Error(`Failed to fetch image: ${response.status}`);
+      return await readBoundedImage(response);
+    } finally {
+      await dispatcher.close();
     }
-    if (!response.ok) throw new Error(`Failed to fetch image: ${response.status}`);
-    return await readBoundedImage(response);
   }
   throw new Error("Too many image redirects");
 }
