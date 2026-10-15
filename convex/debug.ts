@@ -2,7 +2,13 @@ import { query } from "./_generated/server";
 
 export const getAllTranscriptions = query({
   handler: async (ctx) => {
-    const transcriptions = await ctx.db.query("transcriptions").collect();
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Unauthorized");
+
+    const transcriptions = await ctx.db
+      .query("transcriptions")
+      .withIndex("by_user", (q) => q.eq("userId", identity.subject))
+      .collect();
     return transcriptions;
   },
 });
