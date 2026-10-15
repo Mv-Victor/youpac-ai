@@ -1,10 +1,10 @@
 "use node";
 import { v } from "convex/values";
-import { action } from "./_generated/server";
+import { internalAction } from "./_generated/server";
 import * as fs from "fs";
 import * as path from "path";
 
-export const seedBuiltinMedia = action({
+export const seedBuiltinMedia = internalAction({
   args: {
     mediaBasePath: v.optional(v.string()),
   },

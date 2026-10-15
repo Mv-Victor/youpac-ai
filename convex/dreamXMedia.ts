@@ -246,7 +246,7 @@ export const deleteUserMedia = mutation({
   },
 });
 
-export const seedBuiltinMedia = mutation({
+export const seedBuiltinMedia = internalMutation({
   args: {
     items: v.array(v.object({
       type: v.union(v.literal("meme"), v.literal("bgm")),
@@ -258,8 +258,6 @@ export const seedBuiltinMedia = mutation({
     })),
   },
   handler: async (ctx, args) => {
-    const identity = await ctx.auth.getUserIdentity();
-    if (!identity) throw new Error("Unauthorized");
     for (const item of args.items) {
       const existing = await ctx.db
         .query("dreamXMedia")
