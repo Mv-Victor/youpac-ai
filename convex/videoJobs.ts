@@ -1,5 +1,5 @@
 import { v } from "convex/values";
-import { action, internalAction, mutation, internalMutation } from "./_generated/server";
+import { internalAction, mutation, internalMutation } from "./_generated/server";
 import { internal, api } from "./_generated/api";
 
 
@@ -56,7 +56,7 @@ export const transcribeInBackground = internalAction({
     
     try {
       console.log("🚀 Calling ElevenLabs transcription action...");
-      const result = await ctx.runAction(api.transcription.transcribeVideoElevenLabs, {
+      const result = await ctx.runAction(internal.transcription.transcribeVideoElevenLabs, {
         videoId: args.videoId,
         storageId: args.storageId,
         fileType: args.fileType,
@@ -94,6 +94,20 @@ export const updateTranscription = internalMutation({
     await ctx.db.patch(args.videoId, {
       transcription: args.transcription,
       transcriptionStatus: "completed",
+    });
+  },
+});
+
+// Internal mutation for background transcription progress updates
+export const updateTranscriptionStatus = internalMutation({
+  args: {
+    videoId: v.id("videos"),
+    progress: v.string(),
+  },
+  handler: async (ctx, args) => {
+    await ctx.db.patch(args.videoId, {
+      transcriptionStatus: "processing",
+      transcriptionProgress: args.progress,
     });
   },
 });
