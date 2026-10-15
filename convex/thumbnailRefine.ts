@@ -32,6 +32,8 @@ export const refineThumbnail = action({
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) throw new Error("Unauthorized");
 
+    await ctx.runQuery(api.agents.getById, { id: args.agentId });
+
     const apiKey = process.env.OPENAI_API_KEY;
     const apiBaseUrl = process.env.OPENAI_BASE_URL || "https://lnapi.com/v1";
     
