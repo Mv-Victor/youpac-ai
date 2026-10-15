@@ -131,7 +131,9 @@ export const scheduleThumbnailGeneration = mutation({
     
     // Get video metadata and profile for context
     const video = await ctx.db.get(args.videoId);
-    if (!video) throw new Error("Video not found");
+    if (!video || video.userId !== identity.subject) {
+      throw new Error("Video not found or unauthorized");
+    }
     
     // Schedule thumbnail generation to run in background
     await ctx.scheduler.runAfter(0, internal.videoJobs.generateThumbnailInBackground, {
