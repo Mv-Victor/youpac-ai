@@ -29,6 +29,39 @@ function loadDeclarations(relativePath, exportNames) {
   return sandbox.exports;
 }
 
+function loadHttpRoute(path, method) {
+  const relativePath = "../convex/http.ts";
+  const source = readFileSync(new URL(relativePath, import.meta.url), "utf8");
+  const parsed = ts.createSourceFile(relativePath, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+  const routes = [];
+  for (const statement of parsed.statements) {
+    if (!ts.isExpressionStatement(statement) || !ts.isCallExpression(statement.expression)) continue;
+    const call = statement.expression;
+    if (call.expression.getText(parsed) !== "http.route") continue;
+    const definition = call.arguments[0];
+    if (!definition || !ts.isObjectLiteralExpression(definition)) continue;
+    const value = name => definition.properties.find(property =>
+      ts.isPropertyAssignment(property) && property.name.getText(parsed) === name,
+    )?.initializer;
+    if (value("path")?.getText(parsed) !== JSON.stringify(path) || value("method")?.getText(parsed) !== JSON.stringify(method)) continue;
+
+    const { outputText } = ts.transpileModule(statement.getText(parsed), {
+      compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS },
+    });
+    runInNewContext(outputText, {
+      http: { route: definition => routes.push(definition) },
+      httpAction: handler => handler,
+      process: { env: {} },
+      Response,
+      URL,
+      Blob,
+      JSON,
+      Error,
+    });
+  }
+  return routes[0];
+}
+
 const media = loadDeclarations("../convex/dreamXMedia.ts", ["addUserMedia", "seedBuiltinMedia"]);
 const seeder = loadDeclarations("../convex/dreamXSeeder.ts", ["seedBuiltinMedia"]);
 const publicFunctions = new Map(
@@ -66,6 +99,31 @@ test("authenticated and unauthenticated user uploads cannot create built-in medi
   assert.equal(inserted.length, 1);
   assert.equal(inserted[0].isBuiltin, false);
   assert.equal(inserted[0].userId, "ordinary-user");
+});
+
+test("public HTTP requests cannot upload built-in media", async () => {
+  const route = loadHttpRoute("/admin/upload-media", "POST");
+  const stored = [];
+  const mutations = [];
+  const ctx = {
+    storage: {
+      store: async blob => stored.push(blob) && "storage-id",
+      getUrl: async () => "https://example.invalid/stored.gif",
+    },
+    runQuery: async () => null,
+    runMutation: async (name, args) => mutations.push([name, args]),
+  };
+  const request = new Request("https://deployment.example/admin/upload-media?type=meme&name=attacker-controlled", {
+    method: "POST",
+    body: "untrusted bytes",
+    headers: { "content-type": "image/gif" },
+  });
+
+  const response = route ? await route.handler(ctx, request) : new Response("Not found", { status: 404 });
+
+  assert.equal(response.status, 404);
+  assert.deepEqual(stored, []);
+  assert.deepEqual(mutations, []);
 });
 
 test("internal built-in media initialization remains functional and idempotent", async () => {
