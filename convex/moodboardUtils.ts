@@ -1,6 +1,122 @@
+"use node";
+
+import { lookup } from "node:dns/promises";
+import { isIP } from "node:net";
 import { v } from "convex/values";
 import { action } from "./_generated/server";
 import { api } from "./_generated/api";
+
+const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
+const MAX_REDIRECTS = 5;
+const ALLOWED_IMAGE_TYPES = new Set([
+  "image/avif",
+  "image/gif",
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+]);
+
+function isPublicIpAddress(address: string): boolean {
+  const version = isIP(address);
+  if (version === 4) {
+    const [a, b, c] = address.split(".").map(Number);
+    return !(
+      a === 0 || a === 10 || a === 127 || a >= 224 ||
+      (a === 100 && b >= 64 && b <= 127) ||
+      (a === 169 && b === 254) ||
+      (a === 172 && b >= 16 && b <= 31) ||
+      (a === 192 && b === 0 && c === 0) ||
+      (a === 192 && b === 0 && c === 2) ||
+      (a === 192 && b === 168) ||
+      (a === 198 && (b === 18 || b === 19)) ||
+      (a === 198 && b === 51 && c === 100) ||
+      (a === 203 && b === 0 && c === 113)
+    );
+  }
+
+  if (version === 6) {
+    const normalized = address.toLowerCase();
+    // Only globally routable unicast space is accepted. IPv4-mapped addresses
+    // are deliberately rejected instead of maintaining two parsing paths.
+    return /^(2|3)[0-9a-f]{3}:/.test(normalized) &&
+      !normalized.startsWith("2001:db8:");
+  }
+
+  return false;
+}
+
+async function validatePublicImageUrl(rawUrl: string): Promise<URL> {
+  let url: URL;
+  try {
+    url = new URL(rawUrl);
+  } catch {
+    throw new Error("Invalid image URL");
+  }
+
+  if ((url.protocol !== "http:" && url.protocol !== "https:") || url.username || url.password) {
+    throw new Error("Image URL must be an HTTP(S) URL without credentials");
+  }
+
+  const hostname = url.hostname.replace(/^\[|\]$/g, "");
+  if (hostname.toLowerCase() === "localhost" || hostname.toLowerCase().endsWith(".localhost")) {
+    throw new Error("Image URL must resolve to a public address");
+  }
+
+  const addresses = isIP(hostname)
+    ? [{ address: hostname }]
+    : await lookup(hostname, { all: true, verbatim: true });
+  if (!addresses.length || addresses.some(({ address }) => !isPublicIpAddress(address))) {
+    throw new Error("Image URL must resolve only to public addresses");
+  }
+
+  return url;
+}
+
+async function readBoundedImage(response: Response): Promise<{ dataUrl: string; size: number; mimeType: string }> {
+  const mimeType = (response.headers.get("content-type") || "").split(";", 1)[0].trim().toLowerCase();
+  if (!ALLOWED_IMAGE_TYPES.has(mimeType)) throw new Error("Response is not a supported image");
+
+  const declaredLength = response.headers.get("content-length");
+  if (declaredLength !== null && Number(declaredLength) > MAX_IMAGE_BYTES) {
+    throw new Error("Image exceeds the maximum size");
+  }
+  if (!response.body) throw new Error("Image response has no body");
+
+  const reader = response.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      size += value.byteLength;
+      if (size > MAX_IMAGE_BYTES) throw new Error("Image exceeds the maximum size");
+      chunks.push(value);
+    }
+  } catch (error) {
+    await reader.cancel().catch(() => undefined);
+    throw error;
+  }
+
+  const buffer = Buffer.concat(chunks.map(chunk => Buffer.from(chunk)), size);
+  return { dataUrl: `data:${mimeType};base64,${buffer.toString("base64")}`, size, mimeType };
+}
+
+async function downloadPublicImage(rawUrl: string): Promise<{ dataUrl: string; size: number; mimeType: string }> {
+  let url = await validatePublicImageUrl(rawUrl);
+  for (let redirects = 0; redirects <= MAX_REDIRECTS; redirects++) {
+    const response = await fetch(url, { redirect: "manual" });
+    if (response.status >= 300 && response.status < 400) {
+      const location = response.headers.get("location");
+      if (!location || redirects === MAX_REDIRECTS) throw new Error("Too many image redirects");
+      url = await validatePublicImageUrl(new URL(location, url).toString());
+      continue;
+    }
+    if (!response.ok) throw new Error(`Failed to fetch image: ${response.status}`);
+    return await readBoundedImage(response);
+  }
+  throw new Error("Too many image redirects");
+}
 
 // Helper function to extract YouTube video ID
 function extractYouTubeId(url: string): string | null {
@@ -126,24 +242,10 @@ export const downloadImageAsBase64 = action({
   },
   handler: async (ctx, args) => {
     try {
+      const identity = await ctx.auth.getUserIdentity();
+      if (!identity) throw new Error("Unauthorized");
       console.log("[MoodBoard] Downloading image:", args.url);
-      
-      const response = await fetch(args.url);
-      if (!response.ok) {
-        throw new Error(`Failed to fetch image: ${response.status}`);
-      }
-      
-      const blob = await response.blob();
-      const arrayBuffer = await blob.arrayBuffer();
-      const buffer = Buffer.from(arrayBuffer);
-      const base64 = buffer.toString('base64');
-      const mimeType = blob.type || 'image/jpeg';
-      
-      return {
-        dataUrl: `data:${mimeType};base64,${base64}`,
-        size: buffer.length,
-        mimeType,
-      };
+      return await downloadPublicImage(args.url);
     } catch (error) {
       console.error("[MoodBoard] Error downloading image:", error);
       throw error;
@@ -170,6 +272,8 @@ export const processMoodBoardReferences = action({
     imageData: string | null;
     description: string;
   }>> => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Unauthorized");
     const { references, maxImages = 5 } = args;
     const processedRefs = [];
     let imageCount = 0;
@@ -189,20 +293,11 @@ export const processMoodBoardReferences = action({
         if (ref.type === "youtube" && ref.thumbnail) {
           // Download YouTube thumbnail
           try {
-            const response = await fetch(ref.thumbnail);
-            if (!response.ok) {
-              throw new Error(`Failed to fetch thumbnail: ${response.status}`);
-            }
-            
-            const blob = await response.blob();
-            const arrayBuffer = await blob.arrayBuffer();
-            const buffer = Buffer.from(arrayBuffer);
-            const base64 = buffer.toString('base64');
-            const mimeType = blob.type || 'image/jpeg';
+            const image = await downloadPublicImage(ref.thumbnail);
             
             processedRefs.push({
               ...ref,
-              imageData: `data:${mimeType};base64,${base64}`,
+              imageData: image.dataUrl,
               description: `YouTube thumbnail reference: ${ref.title || "Video"}`,
             });
             imageCount++;
@@ -217,20 +312,11 @@ export const processMoodBoardReferences = action({
         } else if (ref.type === "image" && ref.url) {
           // Download direct image
           try {
-            const response = await fetch(ref.url);
-            if (!response.ok) {
-              throw new Error(`Failed to fetch image: ${response.status}`);
-            }
-            
-            const blob = await response.blob();
-            const arrayBuffer = await blob.arrayBuffer();
-            const buffer = Buffer.from(arrayBuffer);
-            const base64 = buffer.toString('base64');
-            const mimeType = blob.type || 'image/jpeg';
+            const image = await downloadPublicImage(ref.url);
             
             processedRefs.push({
               ...ref,
-              imageData: `data:${mimeType};base64,${base64}`,
+              imageData: image.dataUrl,
               description: `Image reference: ${ref.title || "Mood board image"}`,
             });
             imageCount++;
