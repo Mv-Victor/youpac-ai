@@ -1,11 +1,10 @@
 "use node"
 import { v } from "convex/values";
-import { action } from "./_generated/server";
-import { api } from "./_generated/api";
-import { ElevenLabsClient } from "@elevenlabs/elevenlabs-js";
+import { internalAction } from "./_generated/server";
+import { internal } from "./_generated/api";
 
 // Action to transcribe video/audio using ElevenLabs (supports up to 1GB files!)
-export const transcribeVideoElevenLabs = action({
+export const transcribeVideoElevenLabs = internalAction({
   args: {
     videoId: v.id("videos"),
     storageId: v.id("_storage"),
@@ -20,13 +19,6 @@ export const transcribeVideoElevenLabs = action({
       fileName: args.fileName
     });
 
-    // Skip auth check for internal actions (background jobs)
-    // The auth was already checked when scheduling the job
-    const identity = await ctx.auth.getUserIdentity();
-    if (!identity) {
-      console.log("⚠️ No user identity - running from internal action (this is ok)");
-    }
-
     // Get ElevenLabs API key from Convex environment
     const apiKey = process.env.ELEVENLABS_API_KEY;
     console.log("🔑 ElevenLabs API key status:", apiKey ? "Found" : "Not found");
@@ -37,9 +29,8 @@ export const transcribeVideoElevenLabs = action({
 
     try {
       // Update status to show we're starting
-      await ctx.runMutation(api.videos.updateTranscriptionStatus, {
-        id: args.videoId,
-        status: "processing",
+      await ctx.runMutation(internal.videoJobs.updateTranscriptionStatus, {
+        videoId: args.videoId,
         progress: "Starting transcription...",
       });
 
@@ -75,9 +66,8 @@ export const transcribeVideoElevenLabs = action({
       }
       
       // Update progress
-      await ctx.runMutation(api.videos.updateTranscriptionStatus, {
-        id: args.videoId,
-        status: "processing",
+      await ctx.runMutation(internal.videoJobs.updateTranscriptionStatus, {
+        videoId: args.videoId,
         progress: "Sending file URL to ElevenLabs...",
       });
 
@@ -86,9 +76,8 @@ export const transcribeVideoElevenLabs = action({
       console.log("🔐 Using API key:", apiKey.substring(0, 10) + "...");
 
       // Update progress
-      await ctx.runMutation(api.videos.updateTranscriptionStatus, {
-        id: args.videoId,
-        status: "processing",
+      await ctx.runMutation(internal.videoJobs.updateTranscriptionStatus, {
+        videoId: args.videoId,
         progress: "Processing with ElevenLabs Speech-to-Text API...",
       });
 
@@ -185,9 +174,8 @@ export const transcribeVideoElevenLabs = action({
       }
 
       // Update progress
-      await ctx.runMutation(api.videos.updateTranscriptionStatus, {
-        id: args.videoId,
-        status: "processing",
+      await ctx.runMutation(internal.videoJobs.updateTranscriptionStatus, {
+        videoId: args.videoId,
         progress: "Processing transcription results...",
       });
 
@@ -207,7 +195,7 @@ export const transcribeVideoElevenLabs = action({
       }
 
       // Update the video with transcription
-      await ctx.runMutation(api.videos.updateVideoTranscription, {
+      await ctx.runMutation(internal.videoJobs.updateTranscription, {
         videoId: args.videoId,
         transcription: transcriptionText,
       });
@@ -218,28 +206,13 @@ export const transcribeVideoElevenLabs = action({
       console.error("Full error details:", error);
       
       // Update status to failed with user-friendly error message
-      await ctx.runMutation(api.videos.updateTranscriptionStatus, {
-        id: args.videoId,
-        status: "failed",
+      await ctx.runMutation(internal.videoJobs.markTranscriptionFailed, {
+        videoId: args.videoId,
         error: error.message || "Transcription failed. Please try again.",
       });
       
       throw error; // Re-throw the error
     }
-  },
-});
-
-// Main transcription action - just use ElevenLabs
-export const transcribeVideo = action({
-  args: {
-    videoId: v.id("videos"),
-    storageId: v.id("_storage"),
-    fileType: v.optional(v.string()), // 'video' or 'audio'
-    fileName: v.optional(v.string()), // Pass through fileName
-  },
-  handler: async (ctx, args): Promise<{ success: boolean; transcription: string; service?: string }> => {
-    // Just redirect to ElevenLabs
-    return ctx.runAction(api.transcription.transcribeVideoElevenLabs, args);
   },
 });
 
