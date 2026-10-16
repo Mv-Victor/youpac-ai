@@ -28,8 +28,10 @@ export class VideoError extends Error {
 }
 
 export function getErrorDetails(error: any): VideoProcessingError {
+  const message = typeof error?.message === 'string' ? error.message : '';
+
   // Network errors
-  if (error.message?.includes('fetch') || error.message?.includes('network') || error.message?.includes('Failed to fetch')) {
+  if (message.includes('fetch') || message.includes('network') || message.includes('Failed to fetch')) {
     return {
       type: 'network',
       message: 'Network connection error',
@@ -39,7 +41,7 @@ export function getErrorDetails(error: any): VideoProcessingError {
   }
 
   // Upload errors
-  if (error.message?.includes('upload') || error.message?.includes('Upload failed')) {
+  if (message.includes('upload') || message.includes('Upload failed')) {
     return {
       type: 'upload',
       message: 'Failed to upload video',
@@ -49,8 +51,8 @@ export function getErrorDetails(error: any): VideoProcessingError {
   }
 
   // File size errors
-  if (error.message?.includes('too large') || error.message?.includes('Maximum size')) {
-    const sizeMatch = error.message.match(/(\d+\.?\d*)MB/);
+  if (message.includes('too large') || message.includes('Maximum size')) {
+    const sizeMatch = message.match(/(\d+\.?\d*)MB/);
     const size = sizeMatch ? sizeMatch[1] : 'unknown';
     return {
       type: 'size',
@@ -61,7 +63,7 @@ export function getErrorDetails(error: any): VideoProcessingError {
   }
 
   // Format errors
-  if (error.message?.includes('format') || error.message?.includes('codec') || error.message?.includes('not supported')) {
+  if (message.includes('format') || message.includes('codec') || message.includes('not supported')) {
     return {
       type: 'format',
       message: 'Unsupported video format',
@@ -71,11 +73,11 @@ export function getErrorDetails(error: any): VideoProcessingError {
   }
 
   // Transcription errors
-  if (error.message?.includes('transcrib') || error.message?.includes('whisper') || error.message?.includes('Transcription')) {
+  if (message.includes('transcrib') || message.includes('whisper') || message.includes('Transcription')) {
     return {
       type: 'transcription',
       message: 'Failed to transcribe video',
-      details: error.message.includes('timeout') 
+      details: message.includes('timeout')
         ? 'The transcription took too long. Try with a shorter video.'
         : 'We couldn\'t transcribe the audio. The video might be silent or in an unsupported language.',
       recoverable: true,
@@ -83,11 +85,11 @@ export function getErrorDetails(error: any): VideoProcessingError {
   }
 
   // Thumbnail errors
-  if (error.message?.includes('thumbnail') || error.message?.includes('DALL-E') || error.message?.includes('safety system')) {
+  if (message.includes('thumbnail') || message.includes('DALL-E') || message.includes('safety system')) {
     return {
       type: 'thumbnail',
       message: 'Failed to generate thumbnail',
-      details: error.message.includes('safety') 
+      details: message.includes('safety')
         ? 'The AI safety system blocked thumbnail generation. Try uploading a custom thumbnail.'
         : 'We couldn\'t generate a thumbnail automatically.',
       recoverable: true,
@@ -95,7 +97,7 @@ export function getErrorDetails(error: any): VideoProcessingError {
   }
 
   // Metadata errors
-  if (error.message?.includes('metadata') || error.message?.includes('duration') || error.message?.includes('FFmpeg')) {
+  if (message.includes('metadata') || message.includes('duration') || message.includes('FFmpeg')) {
     return {
       type: 'metadata',
       message: 'Failed to extract video information',
@@ -105,7 +107,7 @@ export function getErrorDetails(error: any): VideoProcessingError {
   }
 
   // Audio extraction errors
-  if (error.message?.includes('extract') || error.message?.includes('audio')) {
+  if (message.includes('extract') || message.includes('audio')) {
     return {
       type: 'extraction',
       message: 'Failed to extract audio',
@@ -115,7 +117,7 @@ export function getErrorDetails(error: any): VideoProcessingError {
   }
 
   // Authorization errors
-  if (error.message?.includes('Unauthorized') || error.message?.includes('auth')) {
+  if (message.includes('Unauthorized') || message.includes('auth')) {
     return {
       type: 'upload',
       message: 'Authentication required',
@@ -128,7 +130,7 @@ export function getErrorDetails(error: any): VideoProcessingError {
   return {
     type: 'upload',
     message: 'Something went wrong',
-    details: error.message || 'An unexpected error occurred. Please try again.',
+    details: message || 'An unexpected error occurred. Please try again.',
     recoverable: true,
   };
 }
