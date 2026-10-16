@@ -127,7 +127,7 @@ export function parseJSON(content: string): ParsedTranscription {
     
     if (Array.isArray(data)) {
       segments = data.map(item => {
-        const start = item.start || item.startTime || 0;
+        const start = item.start ?? item.startTime ?? 0;
         return {
           start,
           end: item.end ?? item.endTime ?? start + 5,
