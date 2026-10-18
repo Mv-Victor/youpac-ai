@@ -40,6 +40,16 @@ export function getErrorDetails(error: any): VideoProcessingError {
     };
   }
 
+  // Authorization errors must take precedence over generic upload errors.
+  if (message.includes('Unauthorized') || message.includes('auth')) {
+    return {
+      type: 'upload',
+      message: 'Authentication required',
+      details: 'Please sign in to upload videos.',
+      recoverable: false,
+    };
+  }
+
   // Upload errors
   if (message.includes('upload') || message.includes('Upload failed')) {
     return {
@@ -112,16 +122,6 @@ export function getErrorDetails(error: any): VideoProcessingError {
       type: 'extraction',
       message: 'Failed to extract audio',
       details: 'We couldn\'t extract audio from your video for transcription. The video might be corrupted or use an unsupported codec.',
-      recoverable: false,
-    };
-  }
-
-  // Authorization errors
-  if (message.includes('Unauthorized') || message.includes('auth')) {
-    return {
-      type: 'upload',
-      message: 'Authentication required',
-      details: 'Please sign in to upload videos.',
       recoverable: false,
     };
   }
