@@ -29,6 +29,7 @@ export class VideoError extends Error {
 
 export function getErrorDetails(error: any): VideoProcessingError {
   const message = typeof error?.message === 'string' ? error.message : '';
+  const normalizedMessage = message.toLowerCase();
 
   // Network errors
   if (message.includes('fetch') || message.includes('network') || message.includes('Failed to fetch')) {
@@ -41,7 +42,7 @@ export function getErrorDetails(error: any): VideoProcessingError {
   }
 
   // Authorization errors must take precedence over generic upload errors.
-  if (message.includes('Unauthorized') || message.includes('auth')) {
+  if (normalizedMessage.includes('unauthorized') || normalizedMessage.includes('auth')) {
     return {
       type: 'upload',
       message: 'Authentication required',
