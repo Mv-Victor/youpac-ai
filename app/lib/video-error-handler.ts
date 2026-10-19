@@ -32,7 +32,7 @@ export function getErrorDetails(error: any): VideoProcessingError {
   const normalizedMessage = message.toLowerCase();
 
   // Network errors
-  if (message.includes('fetch') || message.includes('network') || message.includes('Failed to fetch')) {
+  if (normalizedMessage.includes('fetch') || normalizedMessage.includes('network')) {
     return {
       type: 'network',
       message: 'Network connection error',
