@@ -52,7 +52,7 @@ export function getErrorDetails(error: any): VideoProcessingError {
   }
 
   // Upload errors
-  if (message.includes('upload') || message.includes('Upload failed')) {
+  if (normalizedMessage.includes('upload')) {
     return {
       type: 'upload',
       message: 'Failed to upload video',
