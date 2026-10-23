@@ -74,7 +74,7 @@ export function getErrorDetails(error: any): VideoProcessingError {
   }
 
   // Format errors
-  if (message.includes('format') || message.includes('codec') || message.includes('not supported')) {
+  if (normalizedMessage.includes('format') || normalizedMessage.includes('codec') || normalizedMessage.includes('not supported')) {
     return {
       type: 'format',
       message: 'Unsupported video format',
