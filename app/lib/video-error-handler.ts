@@ -51,6 +51,16 @@ export function getErrorDetails(error: any): VideoProcessingError {
     };
   }
 
+  // Format errors must take precedence over generic upload errors.
+  if (normalizedMessage.includes('format') || normalizedMessage.includes('codec') || normalizedMessage.includes('not supported')) {
+    return {
+      type: 'format',
+      message: 'Unsupported video format',
+      details: 'Please upload a video in MP4, MOV, AVI, or WebM format.',
+      recoverable: false,
+    };
+  }
+
   // Upload errors
   if (normalizedMessage.includes('upload')) {
     return {
@@ -70,16 +80,6 @@ export function getErrorDetails(error: any): VideoProcessingError {
       message: 'Video file is too large',
       details: `Your video is ${size}MB. For files over 25MB, we'll extract the audio for transcription. Files over 100MB are not supported.`,
       recoverable: size && parseFloat(size) <= 100,
-    };
-  }
-
-  // Format errors
-  if (normalizedMessage.includes('format') || normalizedMessage.includes('codec') || normalizedMessage.includes('not supported')) {
-    return {
-      type: 'format',
-      message: 'Unsupported video format',
-      details: 'Please upload a video in MP4, MOV, AVI, or WebM format.',
-      recoverable: false,
     };
   }
 
