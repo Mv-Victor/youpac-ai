@@ -72,7 +72,7 @@ export function getErrorDetails(error: any): VideoProcessingError {
   }
 
   // File size errors
-  if (message.includes('too large') || message.includes('Maximum size')) {
+  if (normalizedMessage.includes('too large') || normalizedMessage.includes('maximum size')) {
     const sizeMatch = message.match(/(\d+\.?\d*)MB/);
     const size = sizeMatch ? sizeMatch[1] : 'unknown';
     return {
