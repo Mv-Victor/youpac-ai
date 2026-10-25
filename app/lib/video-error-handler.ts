@@ -96,11 +96,11 @@ export function getErrorDetails(error: any): VideoProcessingError {
   }
 
   // Thumbnail errors
-  if (message.includes('thumbnail') || message.includes('DALL-E') || message.includes('safety system')) {
+  if (normalizedMessage.includes('thumbnail') || normalizedMessage.includes('dall-e') || normalizedMessage.includes('safety system')) {
     return {
       type: 'thumbnail',
       message: 'Failed to generate thumbnail',
-      details: message.includes('safety')
+      details: normalizedMessage.includes('safety')
         ? 'The AI safety system blocked thumbnail generation. Try uploading a custom thumbnail.'
         : 'We couldn\'t generate a thumbnail automatically.',
       recoverable: true,
