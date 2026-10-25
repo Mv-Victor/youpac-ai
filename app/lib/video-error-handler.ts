@@ -84,7 +84,7 @@ export function getErrorDetails(error: any): VideoProcessingError {
   }
 
   // Transcription errors
-  if (message.includes('transcrib') || message.includes('whisper') || message.includes('Transcription')) {
+  if (normalizedMessage.includes('transcrib') || normalizedMessage.includes('whisper')) {
     return {
       type: 'transcription',
       message: 'Failed to transcribe video',
