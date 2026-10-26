@@ -108,7 +108,7 @@ export function getErrorDetails(error: any): VideoProcessingError {
   }
 
   // Metadata errors
-  if (message.includes('metadata') || message.includes('duration') || message.includes('FFmpeg')) {
+  if (normalizedMessage.includes('metadata') || normalizedMessage.includes('duration') || normalizedMessage.includes('ffmpeg')) {
     return {
       type: 'metadata',
       message: 'Failed to extract video information',
