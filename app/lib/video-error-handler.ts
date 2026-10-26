@@ -118,7 +118,7 @@ export function getErrorDetails(error: any): VideoProcessingError {
   }
 
   // Audio extraction errors
-  if (message.includes('extract') || message.includes('audio')) {
+  if (normalizedMessage.includes('extract') || normalizedMessage.includes('audio')) {
     return {
       type: 'extraction',
       message: 'Failed to extract audio',
