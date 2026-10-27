@@ -84,11 +84,11 @@ export function getErrorDetails(error: any): VideoProcessingError {
   }
 
   // Transcription errors
-  if (normalizedMessage.includes('transcrib') || normalizedMessage.includes('whisper')) {
+  if (normalizedMessage.includes('transcrib') || normalizedMessage.includes('transcription') || normalizedMessage.includes('whisper')) {
     return {
       type: 'transcription',
       message: 'Failed to transcribe video',
-      details: message.includes('timeout')
+      details: normalizedMessage.includes('timeout')
         ? 'The transcription took too long. Try with a shorter video.'
         : 'We couldn\'t transcribe the audio. The video might be silent or in an unsupported language.',
       recoverable: true,
