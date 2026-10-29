@@ -7,7 +7,7 @@ import { toast } from "sonner";
 import { PreviewModal } from "~/components/preview/PreviewModal";
 import { Button } from "~/components/ui/button";
 import { VideoProcessingHelp } from "~/components/VideoProcessingHelp";
-import { createRetryAction, handleVideoError } from "~/lib/video-error-handler";
+import { createRetryAction, getErrorDetails, handleVideoError } from "~/lib/video-error-handler";
 import { extractVideoMetadata } from "~/lib/video-metadata";
 
 import { compressAudioFile, getFileSizeMB, isFileTooLarge } from "~/lib/audio-compression";
@@ -2054,8 +2054,9 @@ function InnerCanvas({
       console.error("Upload error:", error);
       console.error("Full error details:", error.stack);
       
-      // Handle the error with our error handler
-      const errorDetails = handleVideoError(error, 'Upload');
+      // Classify the error without showing a toast; this catch owns the single
+      // upload notification so recoverable failures can include the retry action.
+      const errorDetails = getErrorDetails(error);
       
       // Remove the temporary node on error
       setNodes((nds: any) => nds.filter((node: any) => !node.id.startsWith('video_temp_')));
@@ -2073,6 +2074,11 @@ function InnerCanvas({
             label: retryAction.label,
             onClick: retryAction.handler,
           },
+        });
+      } else {
+        toast.error(errorDetails.message, {
+          description: errorDetails.details,
+          duration: 8000,
         });
       }
     }
