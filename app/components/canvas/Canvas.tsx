@@ -2069,7 +2069,10 @@ function InnerCanvas({
         toast.error(errorDetails.message, {
           description: errorDetails.details,
           duration: 8000,
-          action: retryAction,
+          action: {
+            label: retryAction.label,
+            onClick: retryAction.handler,
+          },
         });
       }
     }
