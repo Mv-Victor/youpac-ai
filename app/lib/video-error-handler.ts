@@ -161,7 +161,7 @@ export function handleVideoError(error: any, context: string = '') {
 export function createRetryAction(retryFn: () => void) {
   return {
     label: 'Retry',
-    onClick: retryFn,
+    handler: retryFn,
   };
 }
 
