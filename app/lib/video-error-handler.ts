@@ -61,16 +61,6 @@ export function getErrorDetails(error: any): VideoProcessingError {
     };
   }
 
-  // Upload errors
-  if (normalizedMessage.includes('upload')) {
-    return {
-      type: 'upload',
-      message: 'Failed to upload video',
-      details: 'The video upload was interrupted. Please try again.',
-      recoverable: true,
-    };
-  }
-
   // File size errors
   if (normalizedMessage.includes('too large') || normalizedMessage.includes('maximum size')) {
     const sizeMatch = message.match(/(\d+\.?\d*)MB/i);
@@ -80,6 +70,16 @@ export function getErrorDetails(error: any): VideoProcessingError {
       message: 'Video file is too large',
       details: `Your video is ${size}MB. For files over 25MB, we'll extract the audio for transcription. Files over 100MB are not supported.`,
       recoverable: size && parseFloat(size) <= 100,
+    };
+  }
+
+  // Upload errors
+  if (normalizedMessage.includes('upload')) {
+    return {
+      type: 'upload',
+      message: 'Failed to upload video',
+      details: 'The video upload was interrupted. Please try again.',
+      recoverable: true,
     };
   }
 
