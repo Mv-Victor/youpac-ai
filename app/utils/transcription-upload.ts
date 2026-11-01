@@ -28,7 +28,7 @@ export function parseSRT(content: string): ParsedTranscription {
     if (lines.length < 3) continue;
     
     // Parse timestamp line (00:00:00,000 --> 00:00:05,000)
-    const timestampMatch = lines[1].match(/(\d{2}:\d{2}:\d{2},\d{3})\s*-->\s*(\d{2}:\d{2}:\d{2},\d{3})/);
+    const timestampMatch = lines[1].match(/(\d{2,}:\d{2}:\d{2},\d{3})\s*-->\s*(\d{2,}:\d{2}:\d{2},\d{3})/);
     if (!timestampMatch) continue;
     
     const start = srtTimeToSeconds(timestampMatch[1]);
