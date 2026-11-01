@@ -31,16 +31,6 @@ export function getErrorDetails(error: any): VideoProcessingError {
   const message = typeof error?.message === 'string' ? error.message : '';
   const normalizedMessage = message.toLowerCase();
 
-  // Network errors
-  if (normalizedMessage.includes('fetch') || normalizedMessage.includes('network')) {
-    return {
-      type: 'network',
-      message: 'Network connection error',
-      details: 'Please check your internet connection and try again.',
-      recoverable: true,
-    };
-  }
-
   // Authorization errors must take precedence over generic upload errors.
   if (normalizedMessage.includes('unauthorized') || normalizedMessage.includes('auth')) {
     return {
@@ -48,6 +38,16 @@ export function getErrorDetails(error: any): VideoProcessingError {
       message: 'Authentication required',
       details: 'Please sign in to upload videos.',
       recoverable: false,
+    };
+  }
+
+  // Network errors
+  if (normalizedMessage.includes('fetch') || normalizedMessage.includes('network')) {
+    return {
+      type: 'network',
+      message: 'Network connection error',
+      details: 'Please check your internet connection and try again.',
+      recoverable: true,
     };
   }
 
