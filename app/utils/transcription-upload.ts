@@ -46,6 +46,7 @@ export function parseSRT(content: string): ParsedTranscription {
 export function parseVTT(content: string): ParsedTranscription {
   const segments: TranscriptionSegment[] = [];
   const lines = content.split('\n');
+  const timestampPattern = /^((?:\d{2,}:)?\d{2}:\d{2}\.\d{3})\s*-->\s*((?:\d{2,}:)?\d{2}:\d{2}\.\d{3})(?=\s|$)/;
   let i = 0;
   
   // Skip WEBVTT header
@@ -55,7 +56,7 @@ export function parseVTT(content: string): ParsedTranscription {
     const line = lines[i].trim();
     
     if (line.includes('-->')) {
-      const timestampMatch = line.match(/^((?:\d{2,}:)?\d{2}:\d{2}\.\d{3})\s*-->\s*((?:\d{2,}:)?\d{2}:\d{2}\.\d{3})(?=\s|$)/);
+      const timestampMatch = line.match(timestampPattern);
       if (timestampMatch) {
         const start = vttTimeToSeconds(timestampMatch[1]);
         const end = vttTimeToSeconds(timestampMatch[2]);
@@ -63,7 +64,7 @@ export function parseVTT(content: string): ParsedTranscription {
         // Collect text lines
         const textLines: string[] = [];
         i++;
-        while (i < lines.length && lines[i].trim() && !lines[i].includes('-->')) {
+        while (i < lines.length && lines[i].trim() && !timestampPattern.test(lines[i].trim())) {
           textLines.push(lines[i].trim());
           i++;
         }
@@ -71,6 +72,9 @@ export function parseVTT(content: string): ParsedTranscription {
         if (textLines.length > 0) {
           segments.push({ start, end, text: textLines.join(' ') });
         }
+
+        // Keep an actual timestamp line for the next cue to process.
+        if (i < lines.length && timestampPattern.test(lines[i].trim())) continue;
       }
     }
     i++;
