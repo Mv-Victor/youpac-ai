@@ -13,8 +13,8 @@
 
 const ERROR_MAP: Array<{ pattern: RegExp | string; message: string; description?: string }> = [
   // Auth
-  { pattern: /Unauthorized/i, message: "请先登录", description: "当前操作需要登录后才能进行" },
   { pattern: /not found or unauthorized/i, message: "项目不存在或无权限", description: "请刷新页面后重试" },
+  { pattern: /Unauthorized/i, message: "请先登录", description: "当前操作需要登录后才能进行" },
 
   // Schema / validation
   { pattern: /does not match the schema/i, message: "数据格式错误", description: "请刷新页面后重试，若问题持续请联系支持" },
