@@ -13,6 +13,7 @@
 
 const ERROR_MAP: Array<{ pattern: RegExp | string; message: string; description?: string }> = [
   // Auth
+  { pattern: /Video not found or unauthorized/i, message: "视频不存在或无权限", description: "请刷新页面后重试" },
   { pattern: /not found or unauthorized/i, message: "项目不存在或无权限", description: "请刷新页面后重试" },
   { pattern: /Unauthorized/i, message: "请先登录", description: "当前操作需要登录后才能进行" },
 
