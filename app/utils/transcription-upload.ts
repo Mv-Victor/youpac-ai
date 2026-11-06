@@ -27,8 +27,10 @@ export function parseSRT(content: string): ParsedTranscription {
     const lines = block.trim().split('\n');
     if (lines.length < 2) continue;
     
-    // Parse timestamp line (00:00:00,000 --> 00:00:05,000)
-    const timestampLineIndex = lines[0].includes('-->') ? 0 : 1;
+    // Parse the timestamp wherever it appears in the cue block. SRT identifiers
+    // may be non-numeric and cue metadata can add lines before the timestamp.
+    const timestampLineIndex = lines.findIndex(line => line.includes('-->'));
+    if (timestampLineIndex === -1) continue;
     const timestampMatch = lines[timestampLineIndex].match(/(\d{2,}:\d{2}:\d{2},\d{3})\s*-->\s*(\d{2,}:\d{2}:\d{2},\d{3})/);
     if (!timestampMatch) continue;
     
