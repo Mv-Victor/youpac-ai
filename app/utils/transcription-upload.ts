@@ -25,15 +25,16 @@ export function parseSRT(content: string): ParsedTranscription {
   
   for (const block of blocks) {
     const lines = block.trim().split('\n');
-    if (lines.length < 3) continue;
+    if (lines.length < 2) continue;
     
     // Parse timestamp line (00:00:00,000 --> 00:00:05,000)
-    const timestampMatch = lines[1].match(/(\d{2,}:\d{2}:\d{2},\d{3})\s*-->\s*(\d{2,}:\d{2}:\d{2},\d{3})/);
+    const timestampLineIndex = lines[0].includes('-->') ? 0 : 1;
+    const timestampMatch = lines[timestampLineIndex].match(/(\d{2,}:\d{2}:\d{2},\d{3})\s*-->\s*(\d{2,}:\d{2}:\d{2},\d{3})/);
     if (!timestampMatch) continue;
     
     const start = srtTimeToSeconds(timestampMatch[1]);
     const end = srtTimeToSeconds(timestampMatch[2]);
-    const text = lines.slice(2).join(' ').trim();
+    const text = lines.slice(timestampLineIndex + 1).join(' ').trim();
     
     segments.push({ start, end, text });
   }
