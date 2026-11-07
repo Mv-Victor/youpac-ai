@@ -32,7 +32,12 @@ export function getErrorDetails(error: any): VideoProcessingError {
   const normalizedMessage = message.toLowerCase();
 
   // Authorization errors must take precedence over generic upload errors.
-  if (normalizedMessage.includes('unauthorized') || normalizedMessage.includes('auth')) {
+  if (
+    normalizedMessage.includes('unauthorized') ||
+    normalizedMessage.includes('authentication') ||
+    normalizedMessage.includes('authorization') ||
+    /\bauth\b/.test(normalizedMessage)
+  ) {
     return {
       type: 'upload',
       message: 'Authentication required',
