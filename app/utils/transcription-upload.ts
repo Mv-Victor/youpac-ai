@@ -128,17 +128,32 @@ export function parseTXT(content: string): ParsedTranscription {
 export function parseJSON(content: string): ParsedTranscription {
   try {
     const data = JSON.parse(content);
+
+    const numericTimestamp = (value: unknown, fallback: number): number => {
+      if (value === undefined || value === null) return fallback;
+      if (typeof value === 'number') {
+        if (Number.isFinite(value)) return value;
+        throw new Error('timestamp is not numeric');
+      }
+      if (typeof value === 'string' && value.trim() !== '') {
+        const parsed = Number(value);
+        if (Number.isFinite(parsed)) return parsed;
+      }
+      throw new Error('timestamp is not numeric');
+    };
     
     // Support different JSON structures
     let segments: TranscriptionSegment[] = [];
     
     if (Array.isArray(data)) {
       segments = data.map(item => {
-        const start = item.start ?? item.startTime ?? 0;
+        if (!item || typeof item !== 'object') throw new Error('segment is not an object');
+        const record = item as Record<string, unknown>;
+        const start = numericTimestamp(record.start ?? record.startTime, 0);
         return {
           start,
-          end: item.end ?? item.endTime ?? start + 5,
-          text: item.text || item.content || item.transcript || ''
+          end: numericTimestamp(record.end ?? record.endTime, start + 5),
+          text: record.text || record.content || record.transcript || ''
         };
       });
     } else if (data.segments) {
