@@ -31,7 +31,7 @@ export function parseSRT(content: string): ParsedTranscription {
     // may be non-numeric and cue metadata can add lines before the timestamp.
     const timestampLineIndex = lines.findIndex(line => line.includes('-->'));
     if (timestampLineIndex === -1) continue;
-    const timestampMatch = lines[timestampLineIndex].match(/(\d{2,}:\d{2}:\d{2},\d{3})\s*-->\s*(\d{2,}:\d{2}:\d{2},\d{3})/);
+    const timestampMatch = lines[timestampLineIndex].match(/(\d+:\d{2}:\d{2},\d{3})\s*-->\s*(\d+:\d{2}:\d{2},\d{3})/);
     if (!timestampMatch) continue;
     
     const start = srtTimeToSeconds(timestampMatch[1]);
