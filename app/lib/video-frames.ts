@@ -43,9 +43,6 @@ export async function extractFramesFromVideo(
     // Write video file to FFmpeg file system
     await ffmpeg.writeFile('input.mp4', await fetchFile(videoFile));
     
-    // Get video duration first
-    await ffmpeg.exec(['-i', 'input.mp4']);
-    
     const frames: ExtractedFrame[] = [];
     
     // Extract frames at different timestamps
