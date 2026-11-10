@@ -98,7 +98,7 @@ export function parseTXT(content: string): ParsedTranscription {
     if (!trimmedLine) continue;
     
     // Check for timestamp format [00:00:00] or (00:00:00)
-    const timestampMatch = trimmedLine.match(/[\[(](\d{2}:\d{2}:\d{2})[\])]\s*(.*)/);
+    const timestampMatch = trimmedLine.match(/^[\[(](\d{2}:\d{2}:\d{2})[\])]\s*(.*)/);
     
     if (timestampMatch) {
       const time = simpleTimeToSeconds(timestampMatch[1]);
