@@ -134,10 +134,21 @@ export function parseJSON(content: string): ParsedTranscription {
     
     if (Array.isArray(data)) {
       segments = data.map(item => {
-        const start = item.start ?? item.startTime ?? 0;
+        const startValue = item.start ?? item.startTime ?? 0;
+        const start = Number(startValue);
+        if (!Number.isFinite(start)) {
+          throw new Error('Invalid JSON timestamp');
+        }
+
+        const endValue = item.end ?? item.endTime ?? start + 5;
+        const end = Number(endValue);
+        if (!Number.isFinite(end)) {
+          throw new Error('Invalid JSON timestamp');
+        }
+
         return {
           start,
-          end: item.end ?? item.endTime ?? start + 5,
+          end,
           text: item.text || item.content || item.transcript || ''
         };
       });
