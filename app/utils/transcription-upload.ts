@@ -134,15 +134,15 @@ export function parseJSON(content: string): ParsedTranscription {
     
     if (Array.isArray(data)) {
       segments = data.map(item => {
-        const startValue = item.start ?? item.startTime ?? 0;
-        const start = Number(startValue);
-        if (!Number.isFinite(start)) {
+        const startValue = item.start !== undefined ? item.start : item.startTime;
+        const start = normalizeJSONTimestamp(startValue, 0);
+        if (start === null) {
           throw new Error('Invalid JSON timestamp');
         }
 
-        const endValue = item.end ?? item.endTime ?? start + 5;
-        const end = Number(endValue);
-        if (!Number.isFinite(end)) {
+        const endValue = item.end !== undefined ? item.end : item.endTime;
+        const end = normalizeJSONTimestamp(endValue, start + 5);
+        if (end === null) {
           throw new Error('Invalid JSON timestamp');
         }
 
@@ -164,6 +164,14 @@ export function parseJSON(content: string): ParsedTranscription {
   } catch (error) {
     throw new Error('Invalid JSON format');
   }
+}
+
+function normalizeJSONTimestamp(value: unknown, defaultValue: number): number | null {
+  if (value === undefined) return defaultValue;
+  if (typeof value !== 'number' && typeof value !== 'string') return null;
+  if (typeof value === 'string' && value.trim() === '') return null;
+  const normalized = Number(value);
+  return Number.isFinite(normalized) ? normalized : null;
 }
 
 // Main parser function
