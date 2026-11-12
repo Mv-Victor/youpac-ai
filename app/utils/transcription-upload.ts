@@ -21,7 +21,8 @@ export interface ValidationResult {
 // Parse SRT format
 export function parseSRT(content: string): ParsedTranscription {
   const segments: TranscriptionSegment[] = [];
-  const blocks = content.trim().split(/\n\s*\n/);
+  // Normalize line endings so CRLF cue text does not retain carriage returns.
+  const blocks = content.replace(/\r\n?/g, '\n').trim().split(/\n\s*\n/);
   
   for (const block of blocks) {
     const lines = block.trim().split('\n');
