@@ -153,7 +153,10 @@ export function parseJSON(content: string): ParsedTranscription {
           text: item.text || item.content || item.transcript || ''
         };
       });
-    } else if (data.segments) {
+    } else if (data && Object.prototype.hasOwnProperty.call(data, 'segments')) {
+      if (!Array.isArray(data.segments)) {
+        throw new Error('Invalid JSON format');
+      }
       segments = parseJSON(JSON.stringify(data.segments)).segments;
     } else if (data.transcript) {
       // Single transcript field
