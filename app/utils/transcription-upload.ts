@@ -160,6 +160,9 @@ export function parseJSON(content: string): ParsedTranscription {
       segments = parseJSON(JSON.stringify(data.segments)).segments;
     } else if (data && Object.prototype.hasOwnProperty.call(data, 'transcript')) {
       // Single transcript field
+      if (typeof data.transcript !== 'string' || data.transcript.trim() === '') {
+        throw new Error('Invalid JSON format');
+      }
       segments = [{ start: 0, end: 60, text: data.transcript }];
     } else {
       throw new Error('Invalid JSON format');
