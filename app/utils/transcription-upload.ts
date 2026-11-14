@@ -158,9 +158,11 @@ export function parseJSON(content: string): ParsedTranscription {
         throw new Error('Invalid JSON format');
       }
       segments = parseJSON(JSON.stringify(data.segments)).segments;
-    } else if (data.transcript) {
+    } else if (data && Object.prototype.hasOwnProperty.call(data, 'transcript')) {
       // Single transcript field
       segments = [{ start: 0, end: 60, text: data.transcript }];
+    } else {
+      throw new Error('Invalid JSON format');
     }
     
     const fullText = segments.map(s => s.text).join(' ');
