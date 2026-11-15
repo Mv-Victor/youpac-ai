@@ -135,6 +135,9 @@ export function parseJSON(content: string): ParsedTranscription {
     
     if (Array.isArray(data)) {
       segments = data.map(item => {
+        if (!item || typeof item !== 'object') {
+          throw new Error('Invalid JSON format');
+        }
         const startValue = item.start !== undefined ? item.start : item.startTime;
         const start = normalizeJSONTimestamp(startValue, 0);
         if (start === null) {
@@ -147,10 +150,19 @@ export function parseJSON(content: string): ParsedTranscription {
           throw new Error('Invalid JSON timestamp');
         }
 
+        const textValue = item.text !== undefined
+          ? item.text
+          : item.content !== undefined
+            ? item.content
+            : item.transcript;
+        if (typeof textValue !== 'string' || textValue.trim() === '') {
+          throw new Error('Invalid JSON format');
+        }
+
         return {
           start,
           end,
-          text: item.text || item.content || item.transcript || ''
+          text: textValue
         };
       });
     } else if (data && Object.prototype.hasOwnProperty.call(data, 'segments')) {
