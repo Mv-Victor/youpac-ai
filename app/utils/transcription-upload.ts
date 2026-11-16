@@ -247,6 +247,13 @@ export function validateTranscription(
   }
   
   // Validate timestamps
+  const hasReversedSegment = transcription.segments.some(
+    (segment) => segment.end < segment.start
+  );
+  if (hasReversedSegment) {
+    errors.push("Some subtitles have an end timestamp before their start timestamp");
+  }
+
   if (videoDuration !== undefined && videoDuration !== null && transcription.segments.length > 0) {
     const hasOutOfRangeSegment = transcription.segments.some(
       (segment) => segment.end > videoDuration + 5
