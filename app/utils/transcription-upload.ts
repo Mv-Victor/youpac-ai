@@ -248,8 +248,10 @@ export function validateTranscription(
   
   // Validate timestamps
   if (videoDuration !== undefined && videoDuration !== null && transcription.segments.length > 0) {
-    const lastSegment = transcription.segments[transcription.segments.length - 1];
-    if (lastSegment.end > videoDuration + 5) {
+    const hasOutOfRangeSegment = transcription.segments.some(
+      (segment) => segment.end > videoDuration + 5
+    );
+    if (hasOutOfRangeSegment) {
       warnings.push(`Timestamps exceed video duration (${formatTime(videoDuration)})`);
     }
   }
