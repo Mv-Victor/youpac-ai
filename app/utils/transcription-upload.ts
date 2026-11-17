@@ -247,6 +247,13 @@ export function validateTranscription(
   }
   
   // Validate timestamps
+  const hasNegativeTimestamp = transcription.segments.some(
+    (segment) => segment.start < 0 || segment.end < 0
+  );
+  if (hasNegativeTimestamp) {
+    errors.push("Some subtitles have a negative timestamp");
+  }
+
   const hasReversedSegment = transcription.segments.some(
     (segment) => segment.end < segment.start
   );
