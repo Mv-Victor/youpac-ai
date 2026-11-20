@@ -247,6 +247,13 @@ export function validateTranscription(
   }
   
   // Validate timestamps
+  const hasNonFiniteTimestamp = transcription.segments.some(
+    (segment) => !Number.isFinite(segment.start) || !Number.isFinite(segment.end)
+  );
+  if (hasNonFiniteTimestamp) {
+    errors.push("Some subtitles have a non-finite timestamp");
+  }
+
   const hasNegativeTimestamp = transcription.segments.some(
     (segment) => segment.start < 0 || segment.end < 0
   );
