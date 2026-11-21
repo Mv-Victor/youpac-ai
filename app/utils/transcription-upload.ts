@@ -278,8 +278,9 @@ export function validateTranscription(
   }
   
   // Check for overlapping segments
-  for (let i = 1; i < transcription.segments.length; i++) {
-    if (transcription.segments[i].start < transcription.segments[i - 1].end) {
+  const segmentsByStart = [...transcription.segments].sort((a, b) => a.start - b.start);
+  for (let i = 1; i < segmentsByStart.length; i++) {
+    if (segmentsByStart[i].start < segmentsByStart[i - 1].end) {
       warnings.push("Some subtitles have overlapping timestamps");
       break;
     }
