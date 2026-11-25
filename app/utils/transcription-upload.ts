@@ -50,7 +50,7 @@ export function parseSRT(content: string): ParsedTranscription {
 export function parseVTT(content: string): ParsedTranscription {
   const segments: TranscriptionSegment[] = [];
   const lines = content.split('\n');
-  const timestampPattern = /^((?:\d{2,}:)?[0-5]\d:[0-5]\d\.\d{3})\s*-->\s*((?:\d{2,}:)?[0-5]\d:[0-5]\d\.\d{3})(?=\s|$)/;
+  const timestampPattern = /^((?:\d+:)?[0-5]\d:[0-5]\d\.\d{3})\s*-->\s*((?:\d+:)?[0-5]\d:[0-5]\d\.\d{3})(?=\s|$)/;
   let i = 0;
   
   // Skip WEBVTT header
