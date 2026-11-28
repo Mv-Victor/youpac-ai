@@ -70,10 +70,13 @@ export function parseVTT(content: string): ParsedTranscription {
         i++;
         while (i < lines.length && lines[i].trim()) {
           const textLine = lines[i].trim();
-          // A timestamp-shaped line is only a cue boundary once this cue has
-          // already collected text. This keeps a timestamp-shaped first line
-          // (valid WebVTT cue text) from being mistaken for a new cue.
-          if (textLines.length > 0 && timestampPattern.test(textLine)) break;
+          // Timestamp-shaped lines are valid cue text. Preserve consecutive
+          // timestamp-shaped payload lines, while retaining support for files
+          // that omit the blank line between otherwise ordinary cues.
+          if (
+            timestampPattern.test(textLine) &&
+            textLines.some(existingLine => !timestampPattern.test(existingLine))
+          ) break;
           textLines.push(textLine);
           i++;
         }
